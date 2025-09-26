@@ -15,7 +15,7 @@ load_dotenv()
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton,
-    LabeledPrice, PreCheckoutQuery, ContentType, BufferedInputFile
+    LabeledPrice, PreCheckoutQuery, ContentType, BufferedInputFile, Update
 )
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -2014,55 +2014,64 @@ async def serve_image(request):
         logger.error(f"Error serving image: {e}")
         return web.Response(text="Internal server error", status=500)
 
-# Global task for bot polling
-polling_task = None
-
-async def start_background_tasks(app):
-    """Start bot polling as background task"""
-    global polling_task
+async def webhook_handler(request):
+    """Handle incoming Telegram webhook updates"""
     try:
-        # Delete any existing webhook to enable polling
-        await bot.delete_webhook(drop_pending_updates=True)
-        logger.info("Deleted existing webhook to enable polling")
+        # Get the raw JSON data
+        update_data = await request.json()
         
-        # Initialize HTTP session
-        await init_http_session()
+        # Process the update through aiogram dispatcher
+        telegram_update = Update(**update_data)
+        await dp.feed_update(bot=bot, update=telegram_update)
         
-        # Start bot polling in background
-        polling_task = asyncio.create_task(dp.start_polling(bot, skip_updates=True))
-        logger.info("Bot polling started in background")
+        return web.Response(text="OK", status=200)
         
     except Exception as e:
-        logger.error(f"Error starting background tasks: {e}")
+        logger.error(f"Error processing webhook update: {e}")
+        return web.Response(text="Error", status=500)
 
-async def cleanup_background_tasks(app):
-    """Clean up background tasks"""
-    global polling_task
+async def setup_webhook(app):
+    """Set up webhook with Telegram on startup"""
     try:
-        # Cancel polling task
-        if polling_task:
-            polling_task.cancel()
-            try:
-                await polling_task
-            except asyncio.CancelledError:
-                logger.info("Bot polling task cancelled")
+        # Initialize HTTP session first
+        await init_http_session()
+        
+        # Set webhook URL with Telegram
+        webhook_url = f"{WEBHOOK_URL}/webhook"
+        await bot.set_webhook(
+            url=webhook_url,
+            drop_pending_updates=True,
+            allowed_updates=["message", "callback_query", "pre_checkout_query"]
+        )
+        logger.info(f"✅ Webhook set successfully: {webhook_url}")
+        
+    except Exception as e:
+        logger.error(f"❌ Error setting webhook: {e}")
+
+async def cleanup_webhook(app):
+    """Clean up webhook and HTTP session on shutdown"""
+    try:
+        # Delete webhook
+        await bot.delete_webhook()
+        logger.info("Webhook deleted")
         
         # Cleanup HTTP session
         await cleanup_http_session()
-        logger.info("Background tasks cleaned up")
+        logger.info("Webhook cleanup completed")
         
     except Exception as e:
-        logger.error(f"Error cleaning up background tasks: {e}")
+        logger.error(f"Error cleaning up webhook: {e}")
 
 async def create_web_app():
-    """Create aiohttp web application with startup/cleanup hooks"""
+    """Create aiohttp web application with webhook mode"""
     app = web.Application()
     
-    # Add startup and cleanup hooks
-    app.on_startup.append(start_background_tasks)
-    app.on_cleanup.append(cleanup_background_tasks)
+    # Add startup and cleanup hooks for webhook mode
+    app.on_startup.append(setup_webhook)
+    app.on_cleanup.append(cleanup_webhook)
     
     # Add routes
+    app.router.add_post('/webhook', webhook_handler)  # Telegram webhook endpoint
     app.router.add_post('/brs_callback', brs_callback)
     app.router.add_post('/kie_callback', brs_callback)  # Temporary redirect for old callbacks
     app.router.add_get('/images/{filename}', serve_image)  # Add image serving endpoint
