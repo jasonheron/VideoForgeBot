@@ -71,17 +71,13 @@ def save_user_credits():
 user_credits: Dict[int, int] = load_user_credits()
 logger.info(f"Loaded {len(user_credits)} user credit accounts from storage")
 
-# Available models with emojis and enhanced descriptions
+# Simplified available models - streamlined selection
 AVAILABLE_MODELS = {
-    "veo3_fast": "⚡ Veo 3 Fast - Quick generation", 
-    "veo3": "🎵 Veo 3 - High quality with audio",
-    "runway_gen3": "🚀 Runway Gen-3 - Advanced video",
-    "wan_2_2_t2v": "📝 Wan 2.2 T2V - Text to video",
-    "wan_2_2_i2v": "🖼️ Wan 2.2 I2V - Image to video",
-    "kling_standard": "💰 Kling 2.1 Standard - Affordable 720p",
-    "kling_pro": "⭐ Kling 2.1 Pro - Enhanced 1080p",
-    "kling_master_i2v": "👑 Kling 2.1 Master I2V - Premium image-to-video",
-    "kling_master_t2v": "🎬 Kling 2.1 Master T2V - Premium text-to-video"
+    "veo3_fast": "⚡ Veo 3 Fast - Quick generation with images", 
+    "runway_gen3": "🚀 Runway Gen-3 - Advanced video generation",
+    "wan_2_2_t2v": "📝 Wan 2.2 - Text to video",
+    "wan_2_2_i2v": "🖼️ Wan 2.2 - Image to video",
+    "kling_standard": "💰 Kling 2.1 - Image to video (720p)"
 }
 
 # FSM States
@@ -113,23 +109,17 @@ def deduct_credits(user_id: int, amount: int) -> bool:
     return False
 
 def create_model_selection_keyboard():
-    """Create enhanced inline keyboard for model selection with 2-3 buttons per row"""
+    """Create simplified full-width keyboard for model selection"""
     keyboard = []
-    model_items = list(AVAILABLE_MODELS.items())
     
-    # Group models into rows of 2-3 buttons for better layout
-    for i in range(0, len(model_items), 2):
-        row = []
-        for j in range(2):
-            if i + j < len(model_items):
-                model_key, model_name = model_items[i + j]
-                row.append(InlineKeyboardButton(
-                    text=model_name,
-                    callback_data=f"model_{model_key}"
-                ))
-        keyboard.append(row)
+    # Add each model as a full-width button for better readability
+    for model_key, model_name in AVAILABLE_MODELS.items():
+        keyboard.append([InlineKeyboardButton(
+            text=model_name,
+            callback_data=f"model_{model_key}"
+        )])
     
-    # Add reset and action buttons at the bottom
+    # Add action buttons in pairs
     keyboard.append([
         InlineKeyboardButton(text="🔄 Reset Selection", callback_data="reset_model"),
         InlineKeyboardButton(text="💰 Buy Credits", callback_data="buy_credits")
@@ -1355,38 +1345,57 @@ async def kie_callback(request):
             logger.error(f"Invalid JSON in callback: {e}")
             return web.json_response({"error": "Invalid JSON"}, status=400)
         
+        # Enhanced debugging for callback processing
+        logger.info(f"=== Processing KIE.ai Callback ===")
+        logger.info(f"Parsed JSON data: {json.dumps(data, indent=2)}")
+        
         # KIE.ai callback format: {"code": 200, "msg": "success", "data": {"taskId": "...", "info": {"resultUrls": "[\"url1\"]"}}}
         code = data.get('code')
         msg = data.get('msg', '')
         task_data = data.get('data', {})
         generation_id = task_data.get('taskId')
         
+        logger.info(f"Callback details - Code: {code}, Message: {msg}, TaskId: {generation_id}")
+        
         if not generation_id:
-            logger.warning("No taskId in callback")
+            logger.warning("❌ No taskId in callback - rejecting")
             return web.json_response({"error": "Missing taskId"}, status=400)
         
+        logger.info(f"Current pending generations: {list(pending_generations.keys())}")
+        
         if generation_id not in pending_generations:
-            logger.warning(f"Unknown generation_id: {generation_id}")
+            logger.warning(f"❌ Unknown generation_id: {generation_id}")
+            logger.info(f"Available pending IDs: {list(pending_generations.keys())}")
             return web.json_response({"error": "Unknown generation_id"}, status=400)
         
         generation_info = pending_generations[generation_id]
         user_id = generation_info['user_id']
+        logger.info(f"✅ Found generation for user {user_id}")
         
         if code == 200:
             # Success - extract video URLs from resultUrls JSON string
+            logger.info("✅ Generation successful - processing video URLs")
             info = task_data.get('info', {})
             result_urls_str = info.get('resultUrls', '[]')
+            
+            logger.info(f"Info object: {info}")
+            logger.info(f"Result URLs string: {result_urls_str}")
+            
             try:
                 result_urls = json.loads(result_urls_str)
+                logger.info(f"Parsed result URLs: {result_urls}")
+                
                 if result_urls and len(result_urls) > 0:
                     video_url = result_urls[0]  # Use first video URL
+                    logger.info(f"🎬 Sending video to user {user_id}: {video_url}")
                     await send_video_to_user(user_id, video_url, generation_id)
                 else:
-                    logger.error("No video URLs in successful callback")
+                    logger.error("❌ No video URLs in successful callback")
                     add_credits(user_id, 1)
                     await send_failure_message(user_id, generation_id)
             except (json.JSONDecodeError, IndexError) as e:
-                logger.error(f"Error parsing resultUrls: {e}")
+                logger.error(f"❌ Error parsing resultUrls: {e}")
+                logger.error(f"Raw resultUrls string: {result_urls_str}")
                 add_credits(user_id, 1)
                 await send_failure_message(user_id, generation_id)
         else:
