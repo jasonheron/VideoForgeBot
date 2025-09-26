@@ -28,7 +28,12 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN", "your_telegram_bot_token_here")
-BRS_AI_API_KEY = os.getenv("BRS_AI_API_KEY", "your_brs_ai_api_key_here")
+# Support both BRS_AI_API_KEY (new) and KIE_AI_API_KEY (legacy) for backward compatibility
+BRS_AI_API_KEY = os.getenv("BRS_AI_API_KEY") or os.getenv("KIE_AI_API_KEY")
+if not BRS_AI_API_KEY:
+    BRS_AI_API_KEY = "your_brs_ai_api_key_here"
+elif os.getenv("KIE_AI_API_KEY") and not os.getenv("BRS_AI_API_KEY"):
+    logger.warning("Using legacy KIE_AI_API_KEY environment variable. Consider updating to BRS_AI_API_KEY for future compatibility.")
 PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "your_payment_provider_token")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://your-repl-url.replit.dev")
 CALLBACK_SECRET = os.getenv("CALLBACK_SECRET", "your_callback_secret_key_here")  # New security key

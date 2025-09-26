@@ -56,7 +56,7 @@ The bot requires these API keys to function:
 | Variable | Description | How to Get |
 |----------|-------------|------------|
 | `BOT_TOKEN` | Telegram Bot Token | Message @BotFather → /newbot |
-| `KIE_AI_API_KEY` | KIE.ai API Key | Visit https://kie.ai/api-key |
+| `BRS_AI_API_KEY` or `KIE_AI_API_KEY` | BRS AI API Key (supports both names) | Visit https://kie.ai/api-key |
 | `PAYMENT_PROVIDER_TOKEN` | Not needed for XTR | Leave empty (Telegram Stars) |
 | `CALLBACK_SECRET` | Strong secret for HMAC verification | Generate a random string (32+ characters) |
 | `WEBHOOK_URL` | Your Replit's public URL | Copy from browser address bar when running |
@@ -113,7 +113,7 @@ The bot requires these API keys to function:
 
 3. **Set Up Environment Variables**:
    - Click "Tools" → "Secrets" in Replit
-   - Add BOT_TOKEN and KIE_AI_API_KEY
+   - Add BOT_TOKEN and BRS_AI_API_KEY (or KIE_AI_API_KEY for legacy compatibility)
    - Generate a strong CALLBACK_SECRET (random 32+ char string)
    - Set WEBHOOK_URL to your Replit's public URL
    
