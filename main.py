@@ -92,7 +92,9 @@ class GenerationStates(StatesGroup):
 # Helper functions
 def get_user_credits(user_id: int) -> int:
     """Get user credits"""
-    return user_credits.get(user_id, 0)
+    credits = user_credits.get(user_id, 0)
+    logger.info(f"Getting credits for user {user_id}: {credits} (from dict with keys: {list(user_credits.keys())})")
+    return credits
 
 def add_credits(user_id: int, amount: int):
     """Add credits to user"""
