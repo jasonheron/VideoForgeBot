@@ -1318,9 +1318,9 @@ async def kie_callback(request):
         
         logger.info(f"Found signature: {signature}")
         
-        # SECURITY: Enable callback signature verification for production
-        # Set DISABLE_SIGNATURE_VERIFICATION=true environment variable for local testing only
-        disable_verification = os.getenv('DISABLE_SIGNATURE_VERIFICATION', '').lower() == 'true'
+        # TEMPORARY: Disable signature verification since KIE.ai doesn't send signatures
+        # TODO: Contact KIE.ai about signature implementation or implement IP whitelist
+        disable_verification = True  # os.getenv('DISABLE_SIGNATURE_VERIFICATION', '').lower() == 'true'
         
         if not disable_verification:
             if not signature:
