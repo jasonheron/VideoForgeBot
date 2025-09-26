@@ -264,7 +264,7 @@ async def process_model_selection(callback: CallbackQuery, state: FSMContext):
             
             if callback.message and hasattr(callback.message, 'edit_text'):
                 try:
-                    await callback.message.edit_text(
+                    await callback.message.edit_text(  # type: ignore
                         f"✅ Model selected: {model_name}\n\n"
                         "📝 Please enter your text prompt for video generation:"
                     )
