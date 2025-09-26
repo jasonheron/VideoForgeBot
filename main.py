@@ -92,9 +92,7 @@ class GenerationStates(StatesGroup):
 # Helper functions
 def get_user_credits(user_id: int) -> int:
     """Get user credits"""
-    credits = user_credits.get(user_id, 0)
-    logger.info(f"Getting credits for user {user_id}: {credits} (from dict with keys: {list(user_credits.keys())})")
-    return credits
+    return user_credits.get(user_id, 0)
 
 def add_credits(user_id: int, amount: int):
     """Add credits to user"""
@@ -131,10 +129,14 @@ def create_model_selection_keyboard():
                 ))
         keyboard.append(row)
     
-    # Add quick action buttons at the bottom
+    # Add reset and action buttons at the bottom
     keyboard.append([
-        InlineKeyboardButton(text="💰 Buy Credits", callback_data="buy_credits"),
-        InlineKeyboardButton(text="❓ Help", callback_data="help_models")
+        InlineKeyboardButton(text="🔄 Reset Selection", callback_data="reset_model"),
+        InlineKeyboardButton(text="💰 Buy Credits", callback_data="buy_credits")
+    ])
+    keyboard.append([
+        InlineKeyboardButton(text="❓ Help", callback_data="help_models"),
+        InlineKeyboardButton(text="🔙 Back to Menu", callback_data="back_main")
     ])
     
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -522,11 +524,63 @@ async def quick_generate_callback(callback: CallbackQuery, state: FSMContext):
         return
     
     try:
-        # Simulate the /generate command
-        message = callback.message
-        if message:
-            await cmd_generate(message, state)
+        user_id = callback.from_user.id
+        credits = get_user_credits(user_id)
+        
+        if credits < 1:
+            no_credits_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="💳 Buy Credits", callback_data="buy_credits")],
+                [InlineKeyboardButton(text="📚 Learn More", callback_data="help_credits")]
+            ])
+            await safe_edit_message(
+                callback,
+                "💸 **Insufficient Credits!**\n\n"
+                f"💳 **Current Balance:** `{credits}` credits\n\n"
+                "🎬 **Required:** `1` credit for video generation\n\n"
+                "💡 **Quick Solutions:**\n"
+                "• Buy credits with Telegram Stars (⭐)\n"
+                "• 100 Stars = 1 Credit (≈ $1.30)\n\n"
+                "👆 **Tap below to get started!**",
+                no_credits_keyboard
+            )
+            await callback.answer()
+            return
+        
+        # Check if user has a selected model
+        if user_id not in user_models:
+            keyboard = create_model_selection_keyboard()
+            await safe_edit_message(
+                callback,
+                "🤖 **Choose Your AI Model**\n\n"
+                f"💳 **Your Balance:** `{credits}` credits\n\n"
+                "🎯 **Select the perfect model for your video:**\n\n"
+                "⚡ **Fast:** Quick generation (1-2 min)\n"
+                "🎵 **Audio:** High quality with sound\n"
+                "🚀 **Advanced:** Premium features\n"
+                "💰 **Affordable:** Budget-friendly options\n\n"
+                "👆 **Tap a model below to continue:**",
+                keyboard
+            )
+            await callback.answer()
+            return
+        
+        # User has a model, ask for prompt
+        model_name = AVAILABLE_MODELS[user_models[user_id]]
+        await safe_edit_message(
+            callback,
+            f"✨ **Model Selected:** {model_name}\n\n"
+            f"💳 **Your Balance:** `{credits}` credits\n\n"
+            "📝 **Step 1:** Enter your creative prompt\n\n"
+            "💡 **Pro Tips:**\n"
+            "• Be specific and descriptive\n"
+            "• Mention camera angles, lighting, mood\n"
+            "• Keep it under 500 characters\n\n"
+            "🎬 **Example:** *A majestic eagle soaring over snow-capped mountains at sunset*\n\n"
+            "✍️ **Your turn - type your prompt below:"
+        )
+        await state.set_state(GenerationStates.waiting_for_prompt)
         await callback.answer()
+        
     except Exception as e:
         logger.error(f"Error in quick_generate_callback: {e}")
         await callback.answer("❌ Error starting generation. Please try again.")
@@ -1616,6 +1670,44 @@ async def main():
         logger.error(f"Error in main: {e}")
         await cleanup_http_session()
         raise
+
+@dp.callback_query(F.data == "reset_model")
+async def reset_model_selection(callback: CallbackQuery, state: FSMContext):
+    """Handle model selection reset"""
+    if not callback.from_user:
+        return
+        
+    try:
+        user_id = callback.from_user.id
+        
+        # Clear selected model
+        if user_id in user_models:
+            del user_models[user_id]
+        
+        # Clear any FSM state
+        await state.clear()
+        
+        credits = get_user_credits(user_id)
+        keyboard = create_model_selection_keyboard()
+        
+        await safe_edit_message(
+            callback,
+            "🔄 **Model Selection Reset**\n\n"
+            f"💳 **Your Balance:** `{credits}` credits\n\n"
+            "🤖 **Choose Your AI Model:**\n\n"
+            "⚡ **Fast:** Quick generation (1-2 min)\n"
+            "🎵 **Audio:** High quality with sound\n"
+            "🚀 **Advanced:** Premium features\n"
+            "💰 **Affordable:** Budget-friendly options\n\n"
+            "👆 **Select a model to get started:**",
+            keyboard,
+            "Markdown"
+        )
+        await callback.answer("🔄 Model selection reset!")
+        
+    except Exception as e:
+        logger.error(f"Error in reset_model_selection: {e}")
+        await callback.answer("❌ Error resetting model selection.")
 
 if __name__ == "__main__":
     # Run the bot and web server in the same event loop
