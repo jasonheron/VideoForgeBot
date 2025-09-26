@@ -232,7 +232,7 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
             "aspectRatio": "16:9",
             "enableFallback": False,
             "enableTranslation": True,
-            "callBackUrl": f"{WEBHOOK_URL}/kie_callback"
+            "callBackUrl": f"{WEBHOOK_URL}/brs_callback"
         }
         # Add image URLs for Veo3 if provided
         if image_path:
@@ -248,7 +248,7 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
             "duration": 5,
             "quality": "720p",
             "aspectRatio": "16:9",
-            "callBackUrl": f"{WEBHOOK_URL}/kie_callback"
+            "callBackUrl": f"{WEBHOOK_URL}/brs_callback"
         }
         # Add image URL for Runway if provided
         if image_path:
@@ -1989,6 +1989,7 @@ async def create_web_app():
     
     # Add routes
     app.router.add_post('/brs_callback', brs_callback)
+    app.router.add_post('/kie_callback', brs_callback)  # Temporary redirect for old callbacks
     app.router.add_get('/images/{filename}', serve_image)  # Add image serving endpoint
     app.router.add_get('/', index_handler)
     app.router.add_get('/health', health_handler)
