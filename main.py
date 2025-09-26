@@ -438,6 +438,7 @@ async def cmd_generate(message: Message, state: FSMContext):
             keyboard = create_model_selection_keyboard()
             await message.answer(
                 "🤖 **Choose Your AI Model**\n\n"
+                f"💳 **Your Balance:** `{credits}` credits\n\n"
                 "🎯 **Select the perfect model for your video:**\n\n"
                 "⚡ **Fast:** Quick generation (1-2 min)\n"
                 "🎵 **Audio:** High quality with sound\n"
@@ -453,6 +454,7 @@ async def cmd_generate(message: Message, state: FSMContext):
         model_name = AVAILABLE_MODELS[user_models[user_id]]
         await message.answer(
             f"✨ **Model Selected:** {model_name}\n\n"
+            f"💳 **Your Balance:** `{credits}` credits\n\n"
             "📝 **Step 1:** Enter your creative prompt\n\n"
             "💡 **Pro Tips:**\n"
             "• Be specific and descriptive\n"
