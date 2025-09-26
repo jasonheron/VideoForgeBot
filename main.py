@@ -399,6 +399,84 @@ async def cmd_start(message: Message):
         logger.error(f"Error in cmd_start: {e}")
         await message.answer("❌ An error occurred. Please try again later.")
 
+@dp.message(Command("reset"))
+async def cmd_reset(message: Message, state: FSMContext):
+    """Handle /reset command to clear model selection and state"""
+    if not message.from_user:
+        return
+        
+    try:
+        user_id = message.from_user.id
+        
+        # Clear selected model
+        if user_id in user_models:
+            del user_models[user_id]
+            
+        # Clear FSM state
+        await state.clear()
+        
+        credits = get_user_credits(user_id)
+        
+        await message.answer(
+            "🔄 **Reset Complete!**\n\n"
+            f"💳 **Your Balance:** `{credits}` credits\n\n"
+            "✅ **Cleared:**\n"
+            "• Selected AI model\n"
+            "• Any pending inputs\n"
+            "• Generation state\n\n"
+            "🎬 **Ready for a fresh start!**\n"
+            "Use /generate to begin creating videos",
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in cmd_reset: {e}")
+        await message.answer("❌ An error occurred during reset. Please try again.")
+
+@dp.message(Command("video"))
+async def cmd_send_video(message: Message):
+    """Manually send the last generated video that wasn't delivered"""
+    if not message.from_user:
+        return
+        
+    try:
+        user_id = message.from_user.id
+        
+        # Send the video that was generated but not delivered
+        video_url = "https://tempfile.aiquickdraw.com/p/3fc297d0f7ad7c3c0680d94dc3ae5ee8_1758925534.mp4"
+        
+        await bot.send_message(
+            chat_id=user_id,
+            text=f"🎬 **Your Previous Video is Ready!**\n\n"
+                 f"📹 **Video URL:** {video_url}\n\n"
+                 f"🦝 *The raccoon in a suit turns to the camera and says \"BRS Studio is now live on Telegram!\"*\n\n"
+                 f"💡 This was the video that was successfully generated but not delivered due to a callback parsing issue (now fixed).",
+            parse_mode="Markdown"
+        )
+        
+        # Try to send as actual video file too
+        try:
+            global http_session
+            if not http_session:
+                http_session = ClientSession()
+                
+            async with http_session.get(video_url) as response:
+                if response.status == 200:
+                    video_content = await response.read()
+                    video_file = BufferedInputFile(video_content, filename="raccoon_brs_studio.mp4")
+                    
+                    await bot.send_video(
+                        chat_id=user_id,
+                        video=video_file,
+                        caption="🎬 Your video is ready! (Previously generated)"
+                    )
+        except Exception as video_error:
+            logger.error(f"Could not send video file: {video_error}")
+        
+    except Exception as e:
+        logger.error(f"Error in cmd_send_video: {e}")
+        await message.answer("❌ Could not retrieve the previous video.")
+
 @dp.message(Command("generate"))
 async def cmd_generate(message: Message, state: FSMContext):
     """Handle /generate command"""
@@ -1382,20 +1460,30 @@ async def kie_callback(request):
             logger.info(f"Result URLs string: {result_urls_str}")
             
             try:
-                result_urls = json.loads(result_urls_str)
-                logger.info(f"Parsed result URLs: {result_urls}")
+                # Handle both JSON string and list formats from KIE.ai
+                if isinstance(result_urls_str, list):
+                    result_urls = result_urls_str  # Already a list
+                    logger.info(f"Result URLs received as list: {result_urls}")
+                else:
+                    result_urls = json.loads(result_urls_str)  # Parse JSON string
+                    logger.info(f"Parsed result URLs from JSON: {result_urls}")
                 
                 if result_urls and len(result_urls) > 0:
                     video_url = result_urls[0]  # Use first video URL
                     logger.info(f"🎬 Sending video to user {user_id}: {video_url}")
                     await send_video_to_user(user_id, video_url, generation_id)
+                    
+                    # Clear selected model after successful generation
+                    if user_id in user_models:
+                        del user_models[user_id]
+                        logger.info(f"✅ Cleared model selection for user {user_id}")
                 else:
                     logger.error("❌ No video URLs in successful callback")
                     add_credits(user_id, 1)
                     await send_failure_message(user_id, generation_id)
-            except (json.JSONDecodeError, IndexError) as e:
+            except (json.JSONDecodeError, IndexError, TypeError) as e:
                 logger.error(f"❌ Error parsing resultUrls: {e}")
-                logger.error(f"Raw resultUrls string: {result_urls_str}")
+                logger.error(f"Raw resultUrls data: {result_urls_str} (type: {type(result_urls_str)})")
                 add_credits(user_id, 1)
                 await send_failure_message(user_id, generation_id)
         else:
