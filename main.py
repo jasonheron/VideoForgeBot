@@ -47,8 +47,15 @@ pending_generations: Dict[str, dict] = {}  # Track pending generations
 
 # Available models
 AVAILABLE_MODELS = {
-    "veo3_fast": "Veo 3 Fast - Quick generation",
-    "kling_v2.1": "Kling v2.1 - High quality"
+    "veo3_fast": "Veo 3 Fast - Quick generation", 
+    "veo3": "Veo 3 - High quality with audio",
+    "runway_gen3": "Runway Gen-3 - Advanced video",
+    "wan_2_2_t2v": "Wan 2.2 T2V - Text to video",
+    "wan_2_2_i2v": "Wan 2.2 I2V - Image to video",
+    "kling_standard": "Kling 2.1 Standard - Affordable 720p",
+    "kling_pro": "Kling 2.1 Pro - Enhanced 1080p",
+    "kling_master_i2v": "Kling 2.1 Master I2V - Premium image-to-video",
+    "kling_master_t2v": "Kling 2.1 Master T2V - Premium text-to-video"
 }
 
 # FSM States
@@ -148,24 +155,113 @@ async def upload_image_to_temporary_storage(image_content: bytes, filename: str)
 
 async def send_to_kie_api(prompt: str, model: str, image_path: Optional[str] = None) -> str:
     """Send request to KIE.ai API using aiohttp"""
-    api_url = "https://api.kie.ai/v1/video/generate"  # Example URL - adjust based on actual API
-    
     headers = {
         "Authorization": f"Bearer {KIE_AI_API_KEY}",
         "Content-Type": "application/json"
     }
     
-    data = {
-        "prompt": prompt,
-        "model": model,
-        "callback_url": f"{WEBHOOK_URL}/kie_callback"
-    }
-    
-    # If image is provided, include it in the request
-    if image_path:
-        # In a real implementation, you might need to upload the image first
-        # and get a URL or ID to include in the request
-        data["image_path"] = image_path
+    # Different endpoints and parameters for different models
+    if model.startswith("veo3"):
+        api_url = "https://api.kie.ai/api/v1/veo/generate"
+        data = {
+            "prompt": prompt,
+            "model": model,
+            "aspectRatio": "16:9",
+            "enableFallback": False,
+            "enableTranslation": True,
+            "callBackUrl": f"{WEBHOOK_URL}/kie_callback"
+        }
+        # Add image URLs for Veo3 if provided
+        if image_path:
+            logger.warning("Image upload requires public URL - skipping image for now")
+            # data["imageUrls"] = [image_path]  # Would need public URL
+            
+    elif model == "runway_gen3":
+        api_url = "https://api.kie.ai/api/v1/runway/generate"
+        data = {
+            "prompt": prompt,
+            "duration": 5,
+            "quality": "720p",
+            "aspectRatio": "16:9",
+            "callBackUrl": f"{WEBHOOK_URL}/kie_callback"
+        }
+        # Add image URL for Runway if provided
+        if image_path:
+            logger.warning("Image upload requires public URL - skipping image for now")
+            # data["imageUrl"] = image_path  # Would need public URL
+            
+    elif model.startswith("wan_2_2"):
+        api_url = "https://api.kie.ai/api/v1/jobs/createTask"
+        
+        # Determine the specific Wan 2.2 model variant
+        if model == "wan_2_2_t2v":
+            model_name = "wan/2-2-a14b-text-to-video-turbo"
+            input_data = {
+                "prompt": prompt,
+                "resolution": "720p",
+                "aspect_ratio": "16:9",
+                "enable_prompt_expansion": False,
+                "acceleration": "none"
+            }
+        elif model == "wan_2_2_i2v":
+            model_name = "wan/2-2-a14b-image-to-video-turbo"
+            input_data = {
+                "prompt": prompt,
+                "resolution": "720p", 
+                "aspect_ratio": "auto",
+                "enable_prompt_expansion": False,
+                "acceleration": "none"
+            }
+            # Add image URL if provided
+            if image_path:
+                logger.warning("Image upload requires public URL - skipping image for now")
+                # input_data["image_url"] = image_path  # Would need public URL
+        else:
+            raise Exception(f"Unknown Wan 2.2 variant: {model}")
+            
+        data = {
+            "model": model_name,
+            "callBackUrl": f"{WEBHOOK_URL}/kie_callback",
+            "input": input_data
+        }
+        
+    elif model.startswith("kling"):
+        api_url = "https://api.kie.ai/api/v1/jobs/createTask"
+        
+        # Determine the specific Kling model variant
+        if model == "kling_standard":
+            model_name = "kling/v2-1-standard"
+        elif model == "kling_pro":
+            model_name = "kling/v2-1-pro"
+        elif model == "kling_master_i2v":
+            model_name = "kling/v2-1-master-image-to-video"
+        elif model == "kling_master_t2v":
+            model_name = "kling/v2-1-master-text-to-video"
+        else:
+            raise Exception(f"Unknown Kling variant: {model}")
+            
+        # Build input data for Kling models
+        input_data = {
+            "prompt": prompt,
+            "duration": "5",  # 5 seconds default
+            "aspect_ratio": "16:9",
+            "negative_prompt": "blur, distort, and low quality",
+            "cfg_scale": 0.5
+        }
+        
+        # Add image URL for image-to-video models
+        if model.endswith("_i2v") or model == "kling_standard" or model == "kling_pro":
+            if image_path:
+                logger.warning("Image upload requires public URL - skipping image for now")
+                # input_data["image_url"] = image_path  # Would need public URL
+                
+        data = {
+            "model": model_name,
+            "callBackUrl": f"{WEBHOOK_URL}/kie_callback",
+            "input": input_data
+        }
+    else:
+        raise Exception(f"Unsupported model: {model}")
     
     try:
         global http_session
@@ -175,7 +271,11 @@ async def send_to_kie_api(prompt: str, model: str, image_path: Optional[str] = N
         async with http_session.post(api_url, headers=headers, json=data) as response:
             if response.status == 200:
                 result = await response.json()
-                return result.get("generation_id", "unknown")
+                # KIE.ai returns format: {"code": 200, "msg": "success", "data": {"taskId": "..."}}
+                if result.get("code") == 200 and "data" in result:
+                    return result["data"].get("taskId", "unknown")
+                else:
+                    raise Exception(f"KIE API error: {result.get('msg', 'Unknown error')}")
             else:
                 error_text = await response.text()
                 raise Exception(f"KIE API error: HTTP {response.status} - {error_text}")
@@ -479,13 +579,15 @@ async def kie_callback(request):
             logger.error(f"Invalid JSON in callback: {e}")
             return web.json_response({"error": "Invalid JSON"}, status=400)
         
-        generation_id = data.get('generation_id')
-        status = data.get('status')
-        video_url = data.get('video_url')
+        # KIE.ai callback format: {"code": 200, "msg": "success", "data": {"taskId": "...", "info": {"resultUrls": "[\"url1\"]"}}}
+        code = data.get('code')
+        msg = data.get('msg', '')
+        task_data = data.get('data', {})
+        generation_id = task_data.get('taskId')
         
         if not generation_id:
-            logger.warning("No generation_id in callback")
-            return web.json_response({"error": "Missing generation_id"}, status=400)
+            logger.warning("No taskId in callback")
+            return web.json_response({"error": "Missing taskId"}, status=400)
         
         if generation_id not in pending_generations:
             logger.warning(f"Unknown generation_id: {generation_id}")
@@ -494,15 +596,28 @@ async def kie_callback(request):
         generation_info = pending_generations[generation_id]
         user_id = generation_info['user_id']
         
-        if status == 'completed' and video_url:
-            # Send video to user
-            await send_video_to_user(user_id, video_url, generation_id)
-        elif status == 'failed':
-            # Refund credits
+        if code == 200:
+            # Success - extract video URLs from resultUrls JSON string
+            info = task_data.get('info', {})
+            result_urls_str = info.get('resultUrls', '[]')
+            try:
+                result_urls = json.loads(result_urls_str)
+                if result_urls and len(result_urls) > 0:
+                    video_url = result_urls[0]  # Use first video URL
+                    await send_video_to_user(user_id, video_url, generation_id)
+                else:
+                    logger.error("No video URLs in successful callback")
+                    add_credits(user_id, 1)
+                    await send_failure_message(user_id, generation_id)
+            except (json.JSONDecodeError, IndexError) as e:
+                logger.error(f"Error parsing resultUrls: {e}")
+                add_credits(user_id, 1)
+                await send_failure_message(user_id, generation_id)
+        else:
+            # Failure - refund credits
+            logger.info(f"Video generation failed: {msg}")
             add_credits(user_id, 1)
             await send_failure_message(user_id, generation_id)
-        else:
-            logger.warning(f"Unknown callback status: {status}")
         
         # Clean up
         if generation_id in pending_generations:
