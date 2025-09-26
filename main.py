@@ -2014,9 +2014,53 @@ async def serve_image(request):
         logger.error(f"Error serving image: {e}")
         return web.Response(text="Internal server error", status=500)
 
+# Global task for bot polling
+polling_task = None
+
+async def start_background_tasks(app):
+    """Start bot polling as background task"""
+    global polling_task
+    try:
+        # Delete any existing webhook to enable polling
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Deleted existing webhook to enable polling")
+        
+        # Initialize HTTP session
+        await init_http_session()
+        
+        # Start bot polling in background
+        polling_task = asyncio.create_task(dp.start_polling(bot, skip_updates=True))
+        logger.info("Bot polling started in background")
+        
+    except Exception as e:
+        logger.error(f"Error starting background tasks: {e}")
+
+async def cleanup_background_tasks(app):
+    """Clean up background tasks"""
+    global polling_task
+    try:
+        # Cancel polling task
+        if polling_task:
+            polling_task.cancel()
+            try:
+                await polling_task
+            except asyncio.CancelledError:
+                logger.info("Bot polling task cancelled")
+        
+        # Cleanup HTTP session
+        await cleanup_http_session()
+        logger.info("Background tasks cleaned up")
+        
+    except Exception as e:
+        logger.error(f"Error cleaning up background tasks: {e}")
+
 async def create_web_app():
-    """Create aiohttp web application"""
+    """Create aiohttp web application with startup/cleanup hooks"""
     app = web.Application()
+    
+    # Add startup and cleanup hooks
+    app.on_startup.append(start_background_tasks)
+    app.on_cleanup.append(cleanup_background_tasks)
     
     # Add routes
     app.router.add_post('/brs_callback', brs_callback)
@@ -2040,45 +2084,23 @@ async def cleanup_http_session():
         await http_session.close()
         logger.info("HTTP session closed")
 
-async def main():
-    """Main function to run the bot and web server in the same event loop"""
+def main():
+    """Main function for deployment - create and run aiohttp app"""
     try:
-        # Delete any existing webhook to enable polling
-        try:
-            await bot.delete_webhook(drop_pending_updates=True)
-            logger.info("Deleted existing webhook to enable polling")
-        except Exception as e:
-            logger.warning(f"Error deleting webhook (may not exist): {e}")
+        # Use $PORT environment variable for deployment (default to 5000 for local dev)
+        port = int(os.getenv("PORT", 5000))
         
-        # Initialize HTTP session
-        await init_http_session()
+        # Create web app with startup/cleanup hooks
+        app = asyncio.run(create_web_app())
         
-        # Create web app
-        web_app = await create_web_app()
-        
-        # Create web runner
-        runner = web.AppRunner(web_app)
-        await runner.setup()
-        
-        # Create site and start server
-        site = web.TCPSite(runner, '0.0.0.0', 5000)
-        await site.start()
-        
-        logger.info("aiohttp server started on http://0.0.0.0:5000")
+        logger.info(f"Starting BRS Telegram Bot server on port {port}")
         logger.info(f"Callback URL: {WEBHOOK_URL}/brs_callback")
-        logger.info("Bot starting...")
         
-        try:
-            # Start bot polling - this will run indefinitely
-            await dp.start_polling(bot, skip_updates=True)
-        finally:
-            # Cleanup on shutdown
-            await cleanup_http_session()
-            await runner.cleanup()
-            
+        # Run the web application - this will trigger startup hooks
+        web.run_app(app, host='0.0.0.0', port=port)
+        
     except Exception as e:
         logger.error(f"Error in main: {e}")
-        await cleanup_http_session()
         raise
 
 @dp.callback_query(F.data == "reset_model")
@@ -2120,5 +2142,5 @@ async def reset_model_selection(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Error resetting model selection.")
 
 if __name__ == "__main__":
-    # Run the bot and web server in the same event loop
-    asyncio.run(main())
+    # Run the bot and web server for deployment
+    main()
