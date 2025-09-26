@@ -179,7 +179,7 @@ async def process_model_selection(callback: CallbackQuery, state: FSMContext):
         user_models[user_id] = model_key
         model_name = AVAILABLE_MODELS[model_key]
         
-        if callback.message:
+        if callback.message and hasattr(callback.message, 'edit_text'):
             try:
                 await callback.message.edit_text(
                     f"✅ Model selected: {model_name}\n\n"
@@ -192,6 +192,13 @@ async def process_model_selection(callback: CallbackQuery, state: FSMContext):
                     f"✅ Model selected: {model_name}\n\n"
                     "📝 Please enter your text prompt for video generation:"
                 )
+        elif callback.message:
+            # Message exists but doesn't support editing, send new message
+            await bot.send_message(
+                callback.from_user.id,
+                f"✅ Model selected: {model_name}\n\n"
+                "📝 Please enter your text prompt for video generation:"
+            )
         await state.set_state(GenerationStates.waiting_for_prompt)
     
     await callback.answer()
