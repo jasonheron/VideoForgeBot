@@ -371,16 +371,16 @@ async def cmd_start(message: Message):
 
 👋 **Hello {message.from_user.first_name or 'there'}!**
 
-💳 **Your Credits:** `{credits}` {'credit' if credits == 1 else 'credits'}
+💳 **Your Credits:** {credits} {'credit' if credits == 1 else 'credits'}
 
 🚀 **Quick Start:**
 • Use /generate to create amazing videos
-• Need credits? Try /buy (100 ⭐ = 1 credit)
+• Need credits? Try /buy for great packages
 • Get help anytime with /help
 
 🎯 **Available Models:** 9 AI models including Veo 3, Runway Gen-3, and Kling 2.1
 
-💰 **Pricing:** 1 credit per video (≈ $1.30)
+💰 **Pricing:** 1 credit per video, bulk discounts available
 
 ✨ Ready to create something amazing?
 """
@@ -388,7 +388,7 @@ async def cmd_start(message: Message):
         # Create welcome keyboard with quick actions
         welcome_keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🎬 Generate Video", callback_data="quick_generate")],
-            [InlineKeyboardButton(text="💳 Buy Credits", callback_data="buy_credits"),
+            [InlineKeyboardButton(text="💳 Buy Credits", callback_data="show_packages"),
              InlineKeyboardButton(text="❓ Help & Guide", callback_data="help_main")],
             [InlineKeyboardButton(text="📊 My Stats", callback_data="user_stats")]
         ])
@@ -680,10 +680,10 @@ async def buy_credits_callback(callback: CallbackQuery):
             "• Secure Telegram payment\n\n"
             "🎬 **What you get:**\n"
             "• Generate 1 high-quality AI video\n"
-            "• Choice of 9 premium models\n"
+            "• Choice of 5 premium models\n"
             "• Image-to-video support\n"
             "• Direct delivery to Telegram\n\n"
-            "💡 **Tip:** Credits never expire!"
+            "💡 **Tip:** Credits never expire, bulk discounts available!"
         )
         
         await safe_edit_message(callback, buy_text, reply_markup=buy_keyboard, parse_mode="Markdown")
@@ -1079,6 +1079,183 @@ async def back_main_callback(callback: CallbackQuery):
         logger.error(f"Error in back_main_callback: {e}")
         await callback.answer("❌ Error returning to menu.")
 
+# Credit package callbacks
+@dp.callback_query(F.data == "show_packages")
+async def show_packages_callback(callback: CallbackQuery):
+    """Show credit packages when Buy Credits button is clicked"""
+    await callback.answer()
+    
+    if not callback.from_user:
+        return
+        
+    try:
+        user_id = callback.from_user.id
+        credits = get_user_credits(user_id)
+        
+        # Create credit packages keyboard
+        packages_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎯 Starter: 10⭐ → 12 Credits", callback_data="buy_package_10")],
+            [InlineKeyboardButton(text="🔥 Popular: 20⭐ → 25 Credits", callback_data="buy_package_20")],
+            [InlineKeyboardButton(text="💎 Best Value: 50⭐ → 75 Credits", callback_data="buy_package_50")],
+            [InlineKeyboardButton(text="👑 Ultimate: 100⭐ → 175 Credits", callback_data="buy_package_100")],
+            [InlineKeyboardButton(text="🔙 Back to Menu", callback_data="back_to_start")]
+        ])
+        
+        package_text = (
+            "⭐ **Credit Packages - Telegram Stars**\n\n"
+            f"💳 **Current Balance:** {credits} credits\n\n"
+            "🎯 **Starter Package**\n"
+            "• 10 Stars → 12 Credits\n"
+            "• Great for trying out models\n\n"
+            "🔥 **Popular Choice** (25% Bonus!)\n"
+            "• 20 Stars → 25 Credits\n"
+            "• Perfect for regular users\n\n"
+            "💎 **Best Value** (50% Bonus!)\n"
+            "• 50 Stars → 75 Credits\n"
+            "• Maximum savings per credit\n\n"
+            "👑 **Ultimate Package** (75% Bonus!)\n"
+            "• 100 Stars → 175 Credits\n"
+            "• For power users and creators\n\n"
+            "✨ **All packages include:**\n"
+            "• Access to all 5 AI models\n"
+            "• Image-to-video support\n"
+            "• Instant video delivery\n"
+            "• Credits never expire\n\n"
+            "💡 Choose a package above to proceed!"
+        )
+        
+        try:
+            if callback.message:
+                await callback.message.edit_text(package_text, reply_markup=packages_keyboard, parse_mode="Markdown")
+        except Exception:
+            # Fallback: send new message if editing fails
+            await bot.send_message(callback.from_user.id, package_text, reply_markup=packages_keyboard, parse_mode="Markdown")
+        
+    except Exception as e:
+        logger.error(f"Error in show_packages_callback: {e}")
+        if callback.message:
+            await callback.message.answer("❌ Error showing packages. Please try /buy command.")
+
+@dp.callback_query(F.data.startswith("buy_package_"))
+async def buy_package_callback(callback: CallbackQuery):
+    """Handle credit package purchase"""
+    await callback.answer()
+    
+    if not callback.from_user:
+        return
+        
+    try:
+        # Extract package size from callback data
+        if not callback.data:
+            await callback.message.answer("❌ Invalid package data.")
+            return
+        package_stars = int(callback.data.replace("buy_package_", ""))
+        user_id = callback.from_user.id
+        
+        # Package details
+        packages = {
+            10: {"credits": 12, "title": "Starter Package", "description": "12 credits for video generation"},
+            20: {"credits": 25, "title": "Popular Package", "description": "25 credits with 25% bonus"},
+            50: {"credits": 75, "title": "Best Value Package", "description": "75 credits with 50% bonus"},
+            100: {"credits": 175, "title": "Ultimate Package", "description": "175 credits with 75% bonus"}
+        }
+        
+        if package_stars not in packages:
+            if callback.message:
+                await callback.message.answer("❌ Invalid package selected.")
+            return
+            
+        package = packages[package_stars]
+        
+        # Create invoice
+        price = LabeledPrice(label=f"{package['credits']} Video Credits", amount=package_stars)
+        
+        await bot.send_invoice(
+            chat_id=user_id,
+            title=package["title"],
+            description=package["description"],
+            payload=f"credit_package_{package_stars}",
+            provider_token="",  # Empty for Telegram Stars (XTR)
+            currency="XTR",  # Telegram Stars
+            prices=[price],
+            need_email=False,
+            need_phone_number=False,
+            need_name=False,
+            need_shipping_address=False,
+            is_flexible=False
+        )
+        
+        # Send confirmation message
+        confirm_text = (
+            f"💰 **Payment Request Sent!**\n\n"
+            f"⭐ **Package:** {package_stars} Telegram Stars\n"
+            f"💳 **Credits:** {package['credits']} credits\n\n"
+            f"📱 **Complete payment in Telegram to receive your credits instantly!**"
+        )
+        
+        if callback.message:
+            await callback.message.answer(confirm_text, parse_mode="Markdown")
+        else:
+            await bot.send_message(user_id, confirm_text, parse_mode="Markdown")
+        
+    except Exception as e:
+        logger.error(f"Error in buy_package_callback: {e}")
+        if callback.message:
+            await callback.message.answer(f"❌ Payment error: {str(e)}\n\nPlease contact @niftysolsol for support.")
+        else:
+            await bot.send_message(callback.from_user.id, f"❌ Payment error: {str(e)}\n\nPlease contact @niftysolsol for support.")
+
+@dp.callback_query(F.data == "back_to_start")
+async def back_to_start_callback(callback: CallbackQuery):
+    """Return to main menu"""
+    await callback.answer()
+    
+    if not callback.from_user:
+        return
+        
+    try:
+        user_id = callback.from_user.id
+        credits = get_user_credits(user_id)
+        
+        welcome_text = f"""
+🎬 **Welcome to AI Video Generator Bot!**
+
+👋 **Hello {callback.from_user.first_name or 'there'}!**
+
+💳 **Your Credits:** {credits} {'credit' if credits == 1 else 'credits'}
+
+🚀 **Quick Start:**
+• Use /generate to create amazing videos
+• Need credits? Try /buy for great packages
+• Get help anytime with /help
+
+🎯 **Available Models:** 5 AI models including Veo 3, Runway Gen-3, and Kling 2.1
+
+💰 **Pricing:** 1 credit per video, bulk discounts available
+
+✨ Ready to create something amazing?
+"""
+        
+        # Create welcome keyboard with quick actions
+        welcome_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎬 Generate Video", callback_data="quick_generate")],
+            [InlineKeyboardButton(text="💳 Buy Credits", callback_data="show_packages"),
+             InlineKeyboardButton(text="❓ Help & Guide", callback_data="help_main")],
+            [InlineKeyboardButton(text="📊 My Stats", callback_data="user_stats")]
+        ])
+        
+        try:
+            if callback.message:
+                await callback.message.edit_text(welcome_text, reply_markup=welcome_keyboard, parse_mode="Markdown")
+        except Exception:
+            # Fallback: send new message if editing fails
+            await bot.send_message(user_id, welcome_text, reply_markup=welcome_keyboard, parse_mode="Markdown")
+        
+    except Exception as e:
+        logger.error(f"Error in back_to_start_callback: {e}")
+        if callback.message:
+            await callback.message.answer("❌ Error returning to menu. Please use /start.")
+
 @dp.callback_query(F.data == "help_contact")
 async def help_contact_callback(callback: CallbackQuery):
     """Show contact support information"""
@@ -1309,7 +1486,7 @@ async def cmd_help(message: Message):
             f"Welcome {message.from_user.first_name or 'there'}! Choose a topic below for detailed assistance:\n\n"
             "🎬 **Video Generation** - Step-by-step video creation\n"
             "💳 **Credits & Payment** - Understanding the credit system\n"
-            "🤖 **AI Models** - Compare all 9 available models\n"
+            "🤖 **AI Models** - Compare all 5 available models\n"
             "🖼️ **Image Tips** - Optimize your image uploads\n"
             "🛠️ **Troubleshooting** - Fix common issues\n"
             "👤 **Contact** - Get human support\n\n"
@@ -1329,26 +1506,47 @@ async def cmd_help(message: Message):
 
 @dp.message(Command("buy"))
 async def cmd_buy(message: Message):
-    """Handle /buy command - Telegram Stars payment"""
+    """Handle /buy command - Show credit packages"""
     if not message.from_user:
         return
         
     try:
         user_id = message.from_user.id
+        credits = get_user_credits(user_id)
         
-        # Create invoice for 1 credit = $1.30 equivalent in XTR
-        # 1 Star = $0.013, so $1.30 = 100 Stars
-        price = LabeledPrice(label="1 Video Credit", amount=100)  # Amount in Stars
+        # Create credit packages keyboard
+        packages_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎯 Starter: 10⭐ → 12 Credits", callback_data="buy_package_10")],
+            [InlineKeyboardButton(text="🔥 Popular: 20⭐ → 25 Credits", callback_data="buy_package_20")],
+            [InlineKeyboardButton(text="💎 Best Value: 50⭐ → 75 Credits", callback_data="buy_package_50")],
+            [InlineKeyboardButton(text="👑 Ultimate: 100⭐ → 175 Credits", callback_data="buy_package_100")],
+            [InlineKeyboardButton(text="🔙 Back to Menu", callback_data="back_to_start")]
+        ])
         
-        await bot.send_invoice(
-            chat_id=user_id,
-            title="Video Generation Credit",
-            description="Purchase 1 credit to generate a video ($1.30 equivalent)",
-            payload="credit_purchase_1",
-            provider_token="",  # Empty for Telegram Stars (XTR)
-            currency="XTR",  # Telegram Stars
-            prices=[price]
+        package_text = (
+            "⭐ **Credit Packages - Telegram Stars**\n\n"
+            f"💳 **Current Balance:** {credits} credits\n\n"
+            "🎯 **Starter Package**\n"
+            "• 10 Stars → 12 Credits\n"
+            "• Great for trying out models\n\n"
+            "🔥 **Popular Choice** (25% Bonus!)\n"
+            "• 20 Stars → 25 Credits\n"
+            "• Perfect for regular users\n\n"
+            "💎 **Best Value** (50% Bonus!)\n"
+            "• 50 Stars → 75 Credits\n"
+            "• Maximum savings per credit\n\n"
+            "👑 **Ultimate Package** (75% Bonus!)\n"
+            "• 100 Stars → 175 Credits\n"
+            "• For power users and creators\n\n"
+            "✨ **All packages include:**\n"
+            "• Access to all 5 AI models\n"
+            "• Image-to-video support\n"
+            "• Instant video delivery\n"
+            "• Credits never expire\n\n"
+            "💡 Choose a package above to proceed!"
         )
+        
+        await message.answer(package_text, reply_markup=packages_keyboard, parse_mode="Markdown")
         
     except Exception as e:
         logger.error(f"Error in cmd_buy: {e}")
@@ -1372,18 +1570,54 @@ async def process_successful_payment(message: Message):
     try:
         user_id = message.from_user.id
         payment = message.successful_payment
+        payload = payment.invoice_payload
         
-        if payment.invoice_payload == "credit_purchase_1":
-            add_credits(user_id, 1)
-            await message.answer(
-                "✅ Payment successful!\n"
-                f"1 credit added to your account.\n"
-                f"Total credits: {get_user_credits(user_id)}"
-            )
+        # Parse package from payload
+        if payload.startswith("credit_package_"):
+            package_stars = int(payload.replace("credit_package_", ""))
+            
+            # Credit mapping
+            credit_packages = {
+                10: 12,
+                20: 25,
+                50: 75,
+                100: 175
+            }
+            
+            credits_to_add = credit_packages.get(package_stars, 0)
+            if credits_to_add > 0:
+                add_credits(user_id, credits_to_add)
+                total_credits = get_user_credits(user_id)
+                
+                # Calculate bonus
+                base_credits = package_stars // 10 * 12  # Base rate
+                bonus_credits = credits_to_add - base_credits
+                
+                success_text = (
+                    "🎉 **Payment Successful!**\n\n"
+                    f"⭐ **Purchased:** {package_stars} Telegram Stars\n"
+                    f"💳 **Credits Added:** {credits_to_add}\n"
+                )
+                
+                if bonus_credits > 0:
+                    success_text += f"🎁 **Bonus Credits:** +{bonus_credits} free!\n\n"
+                else:
+                    success_text += "\n"
+                    
+                success_text += (
+                    f"💰 **New Balance:** {total_credits} total credits\n\n"
+                    "🎬 Ready to create videos! Use /generate to start."
+                )
+                
+                await message.answer(success_text, parse_mode="Markdown")
+            else:
+                await message.answer("❌ Invalid package. Please contact support.")
+        else:
+            await message.answer("❌ Unknown payment. Please contact support.")
             
     except Exception as e:
         logger.error(f"Error in process_successful_payment: {e}")
-        await message.answer("❌ An error occurred processing your payment. Please contact support.")
+        await message.answer("❌ An error occurred processing your payment. Please contact @niftysolsol for support.")
 
 # aiohttp web handlers
 async def kie_callback(request):
