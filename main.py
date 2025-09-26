@@ -7,6 +7,10 @@ import hashlib
 import tempfile
 from typing import Dict, Optional
 from aiohttp import web, ClientSession
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton,
@@ -612,6 +616,13 @@ async def cleanup_http_session():
 async def main():
     """Main function to run the bot and web server in the same event loop"""
     try:
+        # Delete any existing webhook to enable polling
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            logger.info("Deleted existing webhook to enable polling")
+        except Exception as e:
+            logger.warning(f"Error deleting webhook (may not exist): {e}")
+        
         # Initialize HTTP session
         await init_http_session()
         
