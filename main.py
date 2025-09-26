@@ -525,12 +525,20 @@ async def cmd_generate(message: Message, state: FSMContext):
             return
         
         # User has a model, ask for prompt
-        model_name = AVAILABLE_MODELS[user_models[user_id]]
+        selected_model = user_models[user_id]
+        model_name = AVAILABLE_MODELS[selected_model]
+        
+        # Check if model supports image-to-video
+        image_models = ["wan_2_2_i2v", "kling_standard", "kling_pro", "kling_master_i2v", "veo3_fast", "runway_gen3"]
+        supports_images = selected_model in image_models
+        
+        prompt_hint = " - you can add an image in step 2" if supports_images else ""
+        
         await message.answer(
             f"✨ **Model Selected:** {model_name}\n"
             "🔄 `/reset` to start over\n\n"
             f"💳 **Your Balance:** `{credits}` credits\n\n"
-            "📝 **Step 1:** Enter your creative prompt\n\n"
+            f"📝 **Step 1:** Enter your creative prompt{prompt_hint}\n\n"
             "💡 **Pro Tips:**\n"
             "• Be specific and descriptive\n"
             "• Mention camera angles, lighting, mood\n"
@@ -636,13 +644,21 @@ async def quick_generate_callback(callback: CallbackQuery, state: FSMContext):
             return
         
         # User has a model, ask for prompt
-        model_name = AVAILABLE_MODELS[user_models[user_id]]
+        selected_model = user_models[user_id]
+        model_name = AVAILABLE_MODELS[selected_model]
+        
+        # Check if model supports image-to-video
+        image_models = ["wan_2_2_i2v", "kling_standard", "kling_pro", "kling_master_i2v", "veo3_fast", "runway_gen3"]
+        supports_images = selected_model in image_models
+        
+        prompt_hint = " - you can add an image in step 2" if supports_images else ""
+        
         await safe_edit_message(
             callback,
             f"✨ **Model Selected:** {model_name}\n"
             "🔄 `/reset` to start over\n\n"
             f"💳 **Your Balance:** `{credits}` credits\n\n"
-            "📝 **Step 1:** Enter your creative prompt\n\n"
+            f"📝 **Step 1:** Enter your creative prompt{prompt_hint}\n\n"
             "💡 **Pro Tips:**\n"
             "• Be specific and descriptive\n"
             "• Mention camera angles, lighting, mood\n"
