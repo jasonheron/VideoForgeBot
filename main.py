@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN", "your_telegram_bot_token_here")
-KIE_AI_API_KEY = os.getenv("KIE_AI_API_KEY", "your_kie_ai_api_key_here")
+BRS_AI_API_KEY = os.getenv("BRS_AI_API_KEY", "your_brs_ai_api_key_here")
 PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "your_payment_provider_token")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://your-repl-url.replit.dev")
 CALLBACK_SECRET = os.getenv("CALLBACK_SECRET", "your_callback_secret_key_here")  # New security key
@@ -216,10 +216,10 @@ async def upload_image_to_temporary_storage(image_content: bytes, filename: str)
         logger.error(f"Error uploading image to temporary storage: {e}")
         return None
 
-async def send_to_kie_api(prompt: str, model: str, image_path: Optional[str] = None) -> str:
-    """Send request to KIE.ai API using aiohttp"""
+async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = None) -> str:
+    """Send request to BRS AI API using aiohttp"""
     headers = {
-        "Authorization": f"Bearer {KIE_AI_API_KEY}",
+        "Authorization": f"Bearer {BRS_AI_API_KEY}",
         "Content-Type": "application/json"
     }
     
@@ -290,7 +290,7 @@ async def send_to_kie_api(prompt: str, model: str, image_path: Optional[str] = N
             
         data = {
             "model": model_name,
-            "callBackUrl": f"{WEBHOOK_URL}/kie_callback",
+            "callBackUrl": f"{WEBHOOK_URL}/brs_callback",
             "input": input_data
         }
         
@@ -328,7 +328,7 @@ async def send_to_kie_api(prompt: str, model: str, image_path: Optional[str] = N
                 
         data = {
             "model": model_name,
-            "callBackUrl": f"{WEBHOOK_URL}/kie_callback",
+            "callBackUrl": f"{WEBHOOK_URL}/brs_callback",
             "input": input_data
         }
     else:
@@ -342,17 +342,17 @@ async def send_to_kie_api(prompt: str, model: str, image_path: Optional[str] = N
         async with http_session.post(api_url, headers=headers, json=data) as response:
             if response.status == 200:
                 result = await response.json()
-                # KIE.ai returns format: {"code": 200, "msg": "success", "data": {"taskId": "..."}}
+                # BRS AI returns format: {"code": 200, "msg": "success", "data": {"taskId": "..."}}
                 if result.get("code") == 200 and "data" in result:
                     return result["data"].get("taskId", "unknown")
                 else:
-                    raise Exception(f"KIE API error: {result.get('msg', 'Unknown error')}")
+                    raise Exception(f"BRS Error: {result.get('msg', 'Unknown error')}")
             else:
                 error_text = await response.text()
-                raise Exception(f"KIE API error: HTTP {response.status} - {error_text}")
+                raise Exception(f"BRS Error: HTTP {response.status} - {error_text}")
                 
     except Exception as e:
-        logger.error(f"Error sending to KIE API: {e}")
+        logger.error(f"Error sending to BRS API: {e}")
         raise
 
 # Bot command handlers
@@ -1406,7 +1406,7 @@ async def process_image_or_skip(message: Message, state: FSMContext):
             await state.clear()
             return
         
-        # Send to KIE.ai API with enhanced progress tracking
+        # Send to BRS AI API with enhanced progress tracking
         try:
             # Initial progress message
             progress_msg = await message.answer(
@@ -1419,7 +1419,7 @@ async def process_image_or_skip(message: Message, state: FSMContext):
                 parse_mode="Markdown"
             )
             
-            generation_id = await send_to_kie_api(prompt, model, image_path)
+            generation_id = await send_to_brs_api(prompt, model, image_path)
             
             # Update progress with generation ID
             try:
@@ -1647,8 +1647,8 @@ async def process_successful_payment(message: Message):
             logger.error("Payment error but no user found in message")
 
 # aiohttp web handlers
-async def kie_callback(request):
-    """Handle KIE.ai API callbacks with HMAC authentication"""
+async def brs_callback(request):
+    """Handle BRS AI API callbacks with HMAC authentication"""
     try:
         # Get request body and headers for debugging
         body = await request.read()
@@ -1662,14 +1662,14 @@ async def kie_callback(request):
             request.headers.get('X-Signature', '') or
             request.headers.get('X-HMAC-Signature', '') or
             request.headers.get('X-Hub-Signature-256', '') or
-            request.headers.get('KIE-Signature', '') or
+            request.headers.get('BRS-Signature', '') or
             request.headers.get('Signature', '')
         )
         
         logger.info(f"Found signature: {signature}")
         
-        # TEMPORARY: Disable signature verification since KIE.ai doesn't send signatures
-        # TODO: Contact KIE.ai about signature implementation or implement IP whitelist
+        # TEMPORARY: Disable signature verification since BRS AI doesn't send signatures
+        # TODO: Contact BRS AI about signature implementation or implement IP whitelist
         disable_verification = True  # os.getenv('DISABLE_SIGNATURE_VERIFICATION', '').lower() == 'true'
         
         if not disable_verification:
@@ -1696,10 +1696,10 @@ async def kie_callback(request):
             return web.json_response({"error": "Invalid JSON"}, status=400)
         
         # Enhanced debugging for callback processing
-        logger.info(f"=== Processing KIE.ai Callback ===")
+        logger.info(f"=== Processing BRS AI Callback ===")
         logger.info(f"Parsed JSON data: {json.dumps(data, indent=2)}")
         
-        # KIE.ai callback format: {"code": 200, "msg": "success", "data": {"taskId": "...", "info": {"resultUrls": "[\"url1\"]"}}}
+        # BRS AI callback format: {"code": 200, "msg": "success", "data": {"taskId": "...", "info": {"resultUrls": "[\"url1\"]"}}}
         code = data.get('code')
         msg = data.get('msg', '')
         task_data = data.get('data', {})
@@ -1741,7 +1741,7 @@ async def kie_callback(request):
             logger.info(f"Result URLs string: {result_urls_str}")
             
             try:
-                # Handle both JSON string and list formats from KIE.ai
+                # Handle both JSON string and list formats from BRS AI
                 if isinstance(result_urls_str, list):
                     result_urls = result_urls_str  # Already a list
                     logger.info(f"Result URLs received as list: {result_urls}")
@@ -1865,7 +1865,7 @@ async def index_handler(request):
     """Basic health check"""
     return web.json_response({
         "status": "Bot is running", 
-        "webhook_url": f"{WEBHOOK_URL}/kie_callback",
+        "webhook_url": f"{WEBHOOK_URL}/brs_callback",
         "pending_generations": len(pending_generations)
     })
 
@@ -1878,7 +1878,7 @@ async def health_handler(request):
     })
 
 async def serve_image(request):
-    """Serve uploaded images for KIE.ai to access with security hardening"""
+    """Serve uploaded images for BRS AI to access with security hardening"""
     try:
         filename = request.match_info['filename']
         
@@ -1988,7 +1988,7 @@ async def create_web_app():
     app = web.Application()
     
     # Add routes
-    app.router.add_post('/kie_callback', kie_callback)
+    app.router.add_post('/brs_callback', brs_callback)
     app.router.add_get('/images/{filename}', serve_image)  # Add image serving endpoint
     app.router.add_get('/', index_handler)
     app.router.add_get('/health', health_handler)
@@ -2033,7 +2033,7 @@ async def main():
         await site.start()
         
         logger.info("aiohttp server started on http://0.0.0.0:5000")
-        logger.info(f"Callback URL: {WEBHOOK_URL}/kie_callback")
+        logger.info(f"Callback URL: {WEBHOOK_URL}/brs_callback")
         logger.info("Bot starting...")
         
         try:
