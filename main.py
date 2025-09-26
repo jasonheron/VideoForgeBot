@@ -1875,23 +1875,13 @@ async def send_failure_message(user_id: int, generation_id: str):
         logger.error(f"Error sending failure message to user {user_id}: {e}")
 
 async def index_handler(request):
-    """Basic health check - must always return 200 for deployment health checks"""
-    try:
-        return web.json_response({
-            "status": "Bot is running",
-            "service": "BRS Telegram Bot",
-            "timestamp": int(time.time())
-        })
-    except Exception as e:
-        # Always return 200 even if there are minor issues
-        logger.warning(f"Health check had minor issue: {e}")
-        return web.json_response({
-            "status": "running",
-            "service": "BRS Telegram Bot"
-        })
+    """Ultra-simple health check for Cloud Run deployment - guaranteed HTTP 200"""
+    # Cloud Run requires the simplest possible health check
+    # No JSON parsing, no logging, no exceptions - just immediate HTTP 200
+    return web.Response(text="OK", status=200, content_type="text/plain")
 
 async def health_handler(request):
-    """Detailed health check endpoint"""
+    """Detailed health check endpoint with fallback"""
     try:
         return web.json_response({
             "status": "healthy",
@@ -1900,13 +1890,9 @@ async def health_handler(request):
             "user_count": len(user_credits),
             "timestamp": int(time.time())
         })
-    except Exception as e:
-        # Always return 200 for health checks
-        logger.warning(f"Detailed health check had issue: {e}")
-        return web.json_response({
-            "status": "healthy",
-            "service": "BRS Telegram Bot"
-        })
+    except Exception:
+        # Always return simple 200 for health checks if JSON fails
+        return web.Response(text="OK", status=200, content_type="text/plain")
 
 async def serve_image(request):
     """Serve uploaded images for BRS AI to access with security hardening"""
