@@ -378,9 +378,11 @@ async def cmd_start(message: Message):
 • Need credits? Try /buy for great packages
 • Get help anytime with /help
 
-🎯 **Available Models:** 9 AI models including Veo 3, Runway Gen-3, and Kling 2.1
+🎯 **Available Models:** 5 AI models including Veo 3, Runway Gen-3, and Kling 2.1
 
 💰 **Pricing:** 1 credit per video, bulk discounts available
+
+⚠️ **This bot is in BETA - not everything works yet - we are updating daily!**
 
 ✨ Ready to create something amazing?
 """
