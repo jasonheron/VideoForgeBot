@@ -248,6 +248,8 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
             "duration": 5,
             "quality": "720p",
             "aspectRatio": "16:9",
+            "model": "runway-duration-5-generate",
+            "waterMark": "",
             "callBackUrl": f"{WEBHOOK_URL}/brs_callback"
         }
         # Add image URL for Runway if provided
