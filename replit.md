@@ -96,6 +96,7 @@ The bot requires these API keys to function:
 ## Current Status
 
 ✅ **MVP Implementation** - Core features implemented
+✅ **Critical Fix Applied** - Persistent credit storage implemented (Dec 26, 2025)
 ⚠️ **Image Upload Limitation** - Requires external storage setup
 ⏳ **Waiting for API Keys** - Bot ready for testing once keys provided
 🔄 **Pending User Setup** - User needs to configure environment variables
@@ -144,9 +145,16 @@ The bot requires these API keys to function:
 - **Image Uploads**: Current implementation downloads images but may need external storage for KIE.ai to access them
 - **Testing**: Bot is ready for testing once proper environment variables are set
 
+## Recent Fixes
+
+### 🔧 Credit Storage Fix (Dec 26, 2025)
+- **Issue**: Credits were lost on bot restart due to in-memory storage
+- **Solution**: Implemented persistent JSON file storage (`user_credits.json`)
+- **Result**: Credits now persist permanently across restarts
+- **Compensation**: Affected users received free credits
+
 ## Known Limitations
 
-- **In-memory storage**: Credits and state are lost on restart
 - **Image handling**: Requires external storage service for full functionality
 - **Local development**: Use polling instead of webhooks for simplicity
 

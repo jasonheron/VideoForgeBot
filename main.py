@@ -40,10 +40,36 @@ dp = Dispatcher(storage=MemoryStorage())
 # Global HTTP client session
 http_session: Optional[ClientSession] = None
 
-# Credit tracking (in memory - in production, use a database)
-user_credits: Dict[int, int] = {}
+# Credit tracking (persistent storage)
+CREDITS_FILE = "user_credits.json"
 user_models: Dict[int, str] = {}  # Store selected model per user
 pending_generations: Dict[str, dict] = {}  # Track pending generations
+
+def load_user_credits() -> Dict[int, int]:
+    """Load user credits from persistent storage"""
+    try:
+        if os.path.exists(CREDITS_FILE):
+            with open(CREDITS_FILE, 'r') as f:
+                # JSON keys are strings, convert back to int
+                data = json.load(f)
+                return {int(k): v for k, v in data.items()}
+        return {}
+    except Exception as e:
+        logger.error(f"Error loading credits: {e}")
+        return {}
+
+def save_user_credits():
+    """Save user credits to persistent storage"""
+    try:
+        with open(CREDITS_FILE, 'w') as f:
+            json.dump(user_credits, f, indent=2)
+        logger.info("Credits saved to persistent storage")
+    except Exception as e:
+        logger.error(f"Error saving credits: {e}")
+
+# Load existing credits on startup
+user_credits: Dict[int, int] = load_user_credits()
+logger.info(f"Loaded {len(user_credits)} user credit accounts from storage")
 
 # Available models
 AVAILABLE_MODELS = {
@@ -73,6 +99,7 @@ def add_credits(user_id: int, amount: int):
     if user_id not in user_credits:
         user_credits[user_id] = 0
     user_credits[user_id] += amount
+    save_user_credits()  # Save to persistent storage
     logger.info(f"Added {amount} credits to user {user_id}. Total: {user_credits[user_id]}")
 
 def deduct_credits(user_id: int, amount: int) -> bool:
@@ -80,6 +107,7 @@ def deduct_credits(user_id: int, amount: int) -> bool:
     current_credits = get_user_credits(user_id)
     if current_credits >= amount:
         user_credits[user_id] = current_credits - amount
+        save_user_credits()  # Save to persistent storage
         logger.info(f"Deducted {amount} credits from user {user_id}. Remaining: {user_credits[user_id]}")
         return True
     return False
