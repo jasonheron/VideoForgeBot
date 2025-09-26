@@ -1710,7 +1710,7 @@ async def brs_callback(request):
         code = data.get('code')
         msg = data.get('msg', '')
         task_data = data.get('data', {})
-        generation_id = task_data.get('taskId')
+        generation_id = task_data.get('taskId') or task_data.get('task_id')
         
         logger.info(f"Callback details - Code: {code}, Message: {msg}, TaskId: {generation_id}")
         
@@ -1734,6 +1734,11 @@ async def brs_callback(request):
             logger.info("✅ Generation successful - processing video URLs")
             info = task_data.get('info', {})
             result_urls_str = info.get('resultUrls', info.get('result_urls', []))
+            
+            # Check for Runway format (video_url directly in task_data)
+            if not result_urls_str and 'video_url' in task_data:
+                result_urls_str = [task_data['video_url']]
+                logger.info(f"Found Runway format video_url: {result_urls_str}")
             
             # Check for Wan2.2 format (resultJson) if no URLs found in info
             if not result_urls_str and 'resultJson' in task_data:
