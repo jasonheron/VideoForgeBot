@@ -775,7 +775,7 @@ async def help_main_callback(callback: CallbackQuery):
             "🤖 **AI Models** - Compare different models\n"
             "🖼️ **Image Tips** - Optimize your image uploads\n"
             "🛠️ **Troubleshooting** - Fix common issues\n\n"
-            "💬 **Need more help?** Contact @your_support_bot"
+            "💬 **Need more help?** Contact @niftysolsol"
         )
         
         await safe_edit_message(callback, help_text, reply_markup=help_keyboard, parse_mode="Markdown")
@@ -802,6 +802,16 @@ async def skip_image_callback(callback: CallbackQuery, state: FSMContext):
                     self.from_user = user
                     self.text = text
                     self.photo = None
+                
+                async def answer(self, text, **kwargs):
+                    # Send message through callback query instead
+                    try:
+                        if callback.message:
+                            await callback.message.answer(text, **kwargs)
+                        else:
+                            logger.error("Callback message is None")
+                    except Exception as e:
+                        logger.error(f"Failed to send mock message answer: {e}")
             
             mock_message = MockMessage(callback.from_user, 'skip')
             await process_image_or_skip(mock_message, state)
@@ -1084,8 +1094,8 @@ async def help_contact_callback(callback: CallbackQuery):
         help_text = (
             "👤 **Contact Support**\n\n"
             "💬 **Get Human Help:**\n"
-            "• Support Bot: @your_support_bot\n"
-            "• Email: support@yourdomain.com\n"
+            "• Support: @niftysolsol\n"
+            "• Response time: 2-24 hours\n"
             "• Response time: 2-24 hours\n\n"
             "📝 **When Contacting Include:**\n"
             "• Your user ID (shown in stats)\n"
@@ -1306,6 +1316,7 @@ async def cmd_help(message: Message):
             "🔥 **Quick Commands:**\n"
             "• `/generate` - Start creating videos\n"
             "• `/buy` - Purchase credits\n"
+            "• `/reset` - Clear selection and start fresh\n"
             "• `/start` - Return to main menu\n\n"
             "💡 **Tip:** Use the buttons below for instant help!"
         )
@@ -1454,7 +1465,16 @@ async def kie_callback(request):
             # Success - extract video URLs from resultUrls JSON string
             logger.info("✅ Generation successful - processing video URLs")
             info = task_data.get('info', {})
-            result_urls_str = info.get('resultUrls', '[]')
+            result_urls_str = info.get('resultUrls', info.get('result_urls', []))
+            
+            # Check for Wan2.2 format (resultJson) if no URLs found in info
+            if not result_urls_str and 'resultJson' in task_data:
+                try:
+                    result_json = json.loads(task_data['resultJson'])
+                    result_urls_str = result_json.get('resultUrls', [])
+                    logger.info(f"Found Wan2.2 format URLs: {result_urls_str}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse Wan2.2 resultJson: {e}")
             
             logger.info(f"Info object: {info}")
             logger.info(f"Result URLs string: {result_urls_str}")
