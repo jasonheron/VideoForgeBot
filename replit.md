@@ -32,7 +32,7 @@ This bot allows users to:
 ### ✅ Architecture
 - **Async/await throughout** - Uses aiogram and aiohttp
 - **Secure callback handling** - HMAC signature verification
-- **Proper image handling** - Downloads from Telegram, uploads to storage
+- **Basic image handling** - Downloads from Telegram (requires external storage setup)
 - **Error handling** - Comprehensive try/catch blocks
 - **Credit system** - In-memory tracking with refund logic
 
@@ -58,8 +58,8 @@ The bot requires these API keys to function:
 | `BOT_TOKEN` | Telegram Bot Token | Message @BotFather → /newbot |
 | `KIE_AI_API_KEY` | KIE.ai API Key | Visit https://kie.ai/api-key |
 | `PAYMENT_PROVIDER_TOKEN` | Not needed for XTR | Leave empty (Telegram Stars) |
-| `CALLBACK_SECRET` | Webhook security | Auto-generated or custom |
-| `WEBHOOK_URL` | Public URL for callbacks | Auto-set by Replit |
+| `CALLBACK_SECRET` | Strong secret for HMAC verification | Generate a random string (32+ characters) |
+| `WEBHOOK_URL` | Your Replit's public URL | Copy from browser address bar when running |
 
 ## User Flow
 
@@ -88,14 +88,16 @@ The bot requires these API keys to function:
 
 ### KIE.ai Integration
 - Async HTTP requests using aiohttp
-- Proper image file handling (download → upload)
+- Basic image file handling (downloads from Telegram)
+- **Note**: Images require external storage setup for KIE.ai access
 - Callback URL for completion notifications
 - Generation ID tracking for user mapping
 
 ## Current Status
 
-✅ **Complete Implementation** - All features working
-⏳ **Waiting for API Keys** - Bot ready to run once keys provided
+✅ **MVP Implementation** - Core features implemented
+⚠️ **Image Upload Limitation** - Requires external storage setup
+⏳ **Waiting for API Keys** - Bot ready for testing once keys provided
 🔄 **Pending User Setup** - User needs to configure environment variables
 
 ## Next Steps for User
@@ -110,26 +112,42 @@ The bot requires these API keys to function:
 
 3. **Set Up Environment Variables**:
    - Click "Tools" → "Secrets" in Replit
-   - Add the required keys
-
+   - Add BOT_TOKEN and KIE_AI_API_KEY
+   - Generate a strong CALLBACK_SECRET (random 32+ char string)
+   - Set WEBHOOK_URL to your Replit's public URL
+   
 4. **Run the Bot**:
    - Click "Run" button
-   - Bot will start and listen for Telegram messages
+   - Bot uses polling to listen for Telegram messages
+   - No webhook setup required with @BotFather
 
 ## Dependencies Installed
 
 - `aiogram` - Modern Telegram Bot framework
 - `aiohttp` - Async HTTP client/server
 - `aiofiles` - Async file operations
-- `cryptography` - HMAC signature verification
-- `requests` - HTTP requests (legacy compatibility)
+- `python-multipart` - File upload handling
 
 ## Architecture Decisions
 
-- **Single Event Loop**: Replaced Flask with aiohttp to eliminate threading issues
-- **Secure Callbacks**: HMAC verification prevents spoofed requests
+- **Single Event Loop**: Uses aiohttp to eliminate threading issues
+- **Secure Callbacks**: HMAC verification prevents spoofed requests  
 - **Async Throughout**: All operations use async/await for better performance
 - **State Management**: FSM for multi-step user interactions
 - **Error Recovery**: Credit refunds and user notifications on failures
+- **Polling Updates**: Uses long polling for simplicity (no webhook setup needed)
 
-The bot is production-ready and follows Telegram's latest 2025 API standards for Stars payments.
+## Important Setup Notes
+
+- **WEBHOOK_URL**: Must be set to your actual Replit public URL (visible when running)
+- **CALLBACK_SECRET**: Generate a strong random string for security
+- **Image Uploads**: Current implementation downloads images but may need external storage for KIE.ai to access them
+- **Testing**: Bot is ready for testing once proper environment variables are set
+
+## Known Limitations
+
+- **In-memory storage**: Credits and state are lost on restart
+- **Image handling**: Requires external storage service for full functionality
+- **Local development**: Use polling instead of webhooks for simplicity
+
+The bot is ready for testing and follows Telegram's latest 2025 API standards for Stars payments. For production use, consider adding database persistence and proper image storage.
