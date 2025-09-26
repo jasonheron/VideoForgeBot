@@ -527,7 +527,8 @@ async def cmd_generate(message: Message, state: FSMContext):
         # User has a model, ask for prompt
         model_name = AVAILABLE_MODELS[user_models[user_id]]
         await message.answer(
-            f"✨ **Model Selected:** {model_name}\n\n"
+            f"✨ **Model Selected:** {model_name}\n"
+            "🔄 `/reset` to start over\n\n"
             f"💳 **Your Balance:** `{credits}` credits\n\n"
             "📝 **Step 1:** Enter your creative prompt\n\n"
             "💡 **Pro Tips:**\n"
@@ -638,7 +639,8 @@ async def quick_generate_callback(callback: CallbackQuery, state: FSMContext):
         model_name = AVAILABLE_MODELS[user_models[user_id]]
         await safe_edit_message(
             callback,
-            f"✨ **Model Selected:** {model_name}\n\n"
+            f"✨ **Model Selected:** {model_name}\n"
+            "🔄 `/reset` to start over\n\n"
             f"💳 **Your Balance:** `{credits}` credits\n\n"
             "📝 **Step 1:** Enter your creative prompt\n\n"
             "💡 **Pro Tips:**\n"
