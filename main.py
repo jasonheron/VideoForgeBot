@@ -15,7 +15,8 @@ load_dotenv()
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton,
-    LabeledPrice, PreCheckoutQuery, ContentType, BufferedInputFile, Update
+    LabeledPrice, PreCheckoutQuery, ContentType, BufferedInputFile, Update,
+    InaccessibleMessage
 )
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -50,10 +51,12 @@ http_session: Optional[ClientSession] = None
 CREDITS_FILE = "user_credits.json"
 GENERATIONS_FILE = "pending_generations.json"
 MODELS_FILE = "user_models.json"
+CLEANUP_FILE = "message_cleanup.json"
 
 # In-memory caches (loaded from persistent storage)
 user_models: Dict[int, str] = {}  # Store selected model per user
 pending_generations: Dict[str, dict] = {}  # Track pending generations
+message_cleanup: Dict[str, dict] = {}  # Track messages to cleanup after generation
 
 def get_credit_account_id(message: Message) -> int:
     """
@@ -147,13 +150,84 @@ def save_user_models():
     except Exception as e:
         logger.error(f"Error saving user models: {e}")
 
+def load_message_cleanup() -> Dict[str, dict]:
+    """Load message cleanup data from persistent storage"""
+    try:
+        if os.path.exists(CLEANUP_FILE):
+            with open(CLEANUP_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading message cleanup: {e}")
+    return {}
+
+def save_message_cleanup():
+    """Save message cleanup data to persistent storage"""
+    try:
+        with open(CLEANUP_FILE, 'w') as f:
+            json.dump(message_cleanup, f, indent=2)
+        logger.info("Message cleanup data saved to persistent storage")
+    except Exception as e:
+        logger.error(f"Error saving message cleanup: {e}")
+
+def track_message_for_cleanup(generation_id: str, message_id: int, chat_id: int, message_type: str = "bot"):
+    """Track a message that should be deleted after generation completes"""
+    if generation_id not in message_cleanup:
+        message_cleanup[generation_id] = {
+            "chat_id": chat_id,
+            "messages": []
+        }
+    
+    message_cleanup[generation_id]["messages"].append({
+        "message_id": message_id,
+        "type": message_type  # "bot", "user", "command"
+    })
+    save_message_cleanup()
+    logger.info(f"Tracking message {message_id} for cleanup in generation {generation_id}")
+
+async def cleanup_generation_messages(generation_id: str, keep_final_message_id: Optional[int] = None):
+    """Delete all tracked messages for a generation except optionally one final message"""
+    if generation_id not in message_cleanup:
+        return
+    
+    cleanup_data = message_cleanup[generation_id]
+    chat_id = cleanup_data["chat_id"]
+    messages_to_delete = cleanup_data["messages"]
+    
+    if not messages_to_delete:
+        return
+    
+    # Delete messages in groups only to reduce clutter
+    if int(chat_id) < 0:  # Negative chat_id indicates group
+        deleted_count = 0
+        for msg_data in messages_to_delete:
+            message_id = msg_data["message_id"]
+            
+            # Skip the final message if specified
+            if keep_final_message_id and message_id == keep_final_message_id:
+                continue
+                
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=message_id)
+                deleted_count += 1
+                logger.info(f"Deleted message {message_id} in group {chat_id}")
+            except Exception as e:
+                logger.warning(f"Could not delete message {message_id} in chat {chat_id}: {e}")
+        
+        logger.info(f"Cleaned up {deleted_count} messages for generation {generation_id} in group {chat_id}")
+    
+    # Remove cleanup data
+    del message_cleanup[generation_id]
+    save_message_cleanup()
+
 # Load existing data on startup
 user_credits: Dict[int, int] = load_user_credits()
 pending_generations = load_pending_generations()
 user_models = load_user_models()
+message_cleanup = load_message_cleanup()
 logger.info(f"Loaded {len(user_credits)} user credit accounts from storage")
 logger.info(f"Loaded {len(pending_generations)} pending generations from storage")
 logger.info(f"Loaded {len(user_models)} user model selections from storage")
+logger.info(f"Loaded {len(message_cleanup)} message cleanup records from storage")
 
 # Simplified available models - streamlined selection
 AVAILABLE_MODELS = {
@@ -601,13 +675,22 @@ async def cmd_generate(message: Message, state: FSMContext):
         user_id = message.from_user.id
         account_id = get_credit_account_id(message)
         credits = get_credits(account_id)
+        is_group = is_group_chat(message)
+        
+        # For groups, delete the command message to reduce clutter
+        if is_group:
+            try:
+                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+                logger.info(f"Deleted command message {message.message_id} in group {message.chat.id}")
+            except Exception as e:
+                logger.warning(f"Could not delete command message: {e}")
         
         if credits < 1:
             no_credits_keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="💳 Buy Credits", callback_data="buy_credits")],
                 [InlineKeyboardButton(text="📚 Learn More", callback_data="help_credits")]
             ])
-            await message.answer(
+            response_msg = await message.answer(
                 "💸 **Insufficient Credits!**\n\n"
                 f"💳 **Current Balance:** `{credits}` credits\n\n"
                 "🎬 **Required:** `1` credit for video generation\n\n"
@@ -623,7 +706,7 @@ async def cmd_generate(message: Message, state: FSMContext):
         # Check if user has a selected model
         if user_id not in user_models:
             keyboard = create_model_selection_keyboard()
-            await message.answer(
+            response_msg = await message.answer(
                 "🤖 **Choose Your AI Model**\n\n"
                 f"💳 **Your Balance:** `{credits}` credits\n\n"
                 "🎯 **Select the perfect model for your video:**\n\n"
@@ -647,19 +730,31 @@ async def cmd_generate(message: Message, state: FSMContext):
         
         prompt_hint = " - you can add an image in step 2" if supports_images else ""
         
-        await message.answer(
-            f"✨ **Model Selected:** {model_name}\n"
-            "🔄 `/reset` to start over\n\n"
-            f"💳 **Your Balance:** `{credits}` credits\n\n"
-            f"📝 **Step 1:** Enter your creative prompt{prompt_hint}\n\n"
-            "💡 **Pro Tips:**\n"
-            "• Be specific and descriptive\n"
-            "• Mention camera angles, lighting, mood\n"
-            "• Keep it under 500 characters\n\n"
-            "🎬 **Example:** *A majestic eagle soaring over snow-capped mountains at sunset*\n\n"
-            "✍️ **Your turn - type your prompt below:**",
-            parse_mode="Markdown"
-        )
+        # In groups, use simplified flow, in private chats use full interactive flow
+        if is_group:
+            # For groups, show a simple message and wait for next user input
+            response_msg = await message.answer(
+                f"🤖 **{model_name}** selected\n"
+                f"📝 **Reply with your video prompt:**\n\n"
+                "💡 *Be descriptive: actions, emotions, camera angles*",
+                parse_mode="Markdown"
+            )
+        else:
+            # Private chat gets full detailed instructions
+            response_msg = await message.answer(
+                f"✨ **Model Selected:** {model_name}\n"
+                "🔄 `/reset` to start over\n\n"
+                f"💳 **Your Balance:** `{credits}` credits\n\n"
+                f"📝 **Step 1:** Enter your creative prompt{prompt_hint}\n\n"
+                "💡 **Pro Tips:**\n"
+                "• Be specific and descriptive\n"
+                "• Mention camera angles, lighting, mood\n"
+                "• Keep it under 500 characters\n\n"
+                "🎬 **Example:** *A majestic eagle soaring over snow-capped mountains at sunset*\n\n"
+                "✍️ **Your turn - type your prompt below:**",
+                parse_mode="Markdown"
+            )
+        
         await state.set_state(GenerationStates.waiting_for_prompt)
         
     except Exception as e:
@@ -1267,16 +1362,20 @@ async def show_packages_callback(callback: CallbackQuery):
         )
         
         try:
-            if callback.message:
+            if callback.message and isinstance(callback.message, Message):
                 await callback.message.edit_text(package_text, reply_markup=packages_keyboard, parse_mode="Markdown")
+            else:
+                await bot.send_message(callback.from_user.id, package_text, reply_markup=packages_keyboard, parse_mode="Markdown")
         except Exception:
             # Fallback: send new message if editing fails
             await bot.send_message(callback.from_user.id, package_text, reply_markup=packages_keyboard, parse_mode="Markdown")
         
     except Exception as e:
         logger.error(f"Error in show_packages_callback: {e}")
-        if callback.message:
+        if callback.message and hasattr(callback.message, 'answer'):
             await callback.message.answer("❌ Error showing packages. Please try /buy command.")
+        else:
+            await bot.send_message(callback.from_user.id, "❌ Error showing packages. Please try /buy command.")
 
 @dp.callback_query(F.data.startswith("buy_package_"))
 async def buy_package_callback(callback: CallbackQuery):
@@ -1289,7 +1388,10 @@ async def buy_package_callback(callback: CallbackQuery):
     try:
         # Extract package size from callback data
         if not callback.data:
-            await callback.message.answer("❌ Invalid package data.")
+            if callback.message and hasattr(callback.message, 'answer'):
+                await callback.message.answer("❌ Invalid package data.")
+            else:
+                await bot.send_message(callback.from_user.id, "❌ Invalid package data.")
             return
         package_stars = int(callback.data.replace("buy_package_", ""))
         user_id = callback.from_user.id
@@ -1304,8 +1406,10 @@ async def buy_package_callback(callback: CallbackQuery):
         }
         
         if package_stars not in packages:
-            if callback.message:
+            if callback.message and hasattr(callback.message, 'answer'):
                 await callback.message.answer("❌ Invalid package selected.")
+            else:
+                await bot.send_message(callback.from_user.id, "❌ Invalid package selected.")
             return
             
         package = packages[package_stars]
@@ -1389,16 +1493,20 @@ async def back_to_start_callback(callback: CallbackQuery):
         ])
         
         try:
-            if callback.message:
+            if callback.message and isinstance(callback.message, Message):
                 await callback.message.edit_text(welcome_text, reply_markup=welcome_keyboard, parse_mode="Markdown")
+            else:
+                await bot.send_message(user_id, welcome_text, reply_markup=welcome_keyboard, parse_mode="Markdown")
         except Exception:
             # Fallback: send new message if editing fails
             await bot.send_message(user_id, welcome_text, reply_markup=welcome_keyboard, parse_mode="Markdown")
         
     except Exception as e:
         logger.error(f"Error in back_to_start_callback: {e}")
-        if callback.message:
+        if callback.message and hasattr(callback.message, 'answer'):
             await callback.message.answer("❌ Error returning to menu. Please use /start.")
+        else:
+            await bot.send_message(callback.from_user.id, "❌ Error returning to menu. Please use /start.")
 
 @dp.callback_query(F.data == "help_contact")
 async def help_contact_callback(callback: CallbackQuery):
