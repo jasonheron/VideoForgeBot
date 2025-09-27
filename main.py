@@ -46,8 +46,12 @@ dp = Dispatcher(storage=MemoryStorage())
 # Global HTTP client session
 http_session: Optional[ClientSession] = None
 
-# Credit tracking (persistent storage)
+# Persistent storage files
 CREDITS_FILE = "user_credits.json"
+GENERATIONS_FILE = "pending_generations.json"
+MODELS_FILE = "user_models.json"
+
+# In-memory caches (loaded from persistent storage)
 user_models: Dict[int, str] = {}  # Store selected model per user
 pending_generations: Dict[str, dict] = {}  # Track pending generations
 
@@ -73,9 +77,53 @@ def save_user_credits():
     except Exception as e:
         logger.error(f"Error saving credits: {e}")
 
-# Load existing credits on startup
+def load_pending_generations() -> Dict[str, dict]:
+    """Load pending generations from persistent storage"""
+    try:
+        if os.path.exists(GENERATIONS_FILE):
+            with open(GENERATIONS_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading pending generations: {e}")
+    return {}
+
+def save_pending_generations():
+    """Save pending generations to persistent storage"""
+    try:
+        with open(GENERATIONS_FILE, 'w') as f:
+            json.dump(pending_generations, f, indent=2)
+        logger.info("Pending generations saved to persistent storage")
+    except Exception as e:
+        logger.error(f"Error saving pending generations: {e}")
+
+def load_user_models() -> Dict[int, str]:
+    """Load user models from persistent storage"""
+    try:
+        if os.path.exists(MODELS_FILE):
+            with open(MODELS_FILE, 'r') as f:
+                # Convert string keys back to integers
+                data = json.load(f)
+                return {int(k): v for k, v in data.items()}
+    except Exception as e:
+        logger.error(f"Error loading user models: {e}")
+    return {}
+
+def save_user_models():
+    """Save user models to persistent storage"""
+    try:
+        with open(MODELS_FILE, 'w') as f:
+            json.dump(user_models, f, indent=2)
+        logger.info("User models saved to persistent storage")
+    except Exception as e:
+        logger.error(f"Error saving user models: {e}")
+
+# Load existing data on startup
 user_credits: Dict[int, int] = load_user_credits()
+pending_generations = load_pending_generations()
+user_models = load_user_models()
 logger.info(f"Loaded {len(user_credits)} user credit accounts from storage")
+logger.info(f"Loaded {len(pending_generations)} pending generations from storage")
+logger.info(f"Loaded {len(user_models)} user model selections from storage")
 
 # Simplified available models - streamlined selection
 AVAILABLE_MODELS = {
@@ -573,6 +621,7 @@ async def process_model_selection(callback: CallbackQuery, state: FSMContext):
         
         if model_key in AVAILABLE_MODELS:
             user_models[user_id] = model_key
+            save_user_models()  # Persist model selection
             model_name = AVAILABLE_MODELS[model_key]
             
             if callback.message and hasattr(callback.message, 'edit_text'):
@@ -1465,6 +1514,7 @@ async def process_image_or_skip(message: Message, state: FSMContext):
                 "model": model,
                 "image_path": image_path
             }
+            save_pending_generations()  # Persist generation data
             
             # Final confirmation with helpful info
             final_keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -1771,6 +1821,7 @@ async def brs_callback(request):
                     # Clear selected model after successful generation
                     if user_id in user_models:
                         del user_models[user_id]
+                        save_user_models()  # Persist model clearing
                         logger.info(f"✅ Cleared model selection for user {user_id}")
                 else:
                     logger.error("❌ No video URLs in successful callback")
@@ -1799,6 +1850,7 @@ async def brs_callback(request):
                     logger.error(f"Error cleaning up image file {image_path}: {e}")
             
             del pending_generations[generation_id]
+            save_pending_generations()  # Persist cleanup
         
         return web.json_response({"status": "ok"})
         
@@ -2143,6 +2195,7 @@ async def reset_model_selection(callback: CallbackQuery, state: FSMContext):
         # Clear selected model
         if user_id in user_models:
             del user_models[user_id]
+            save_user_models()  # Persist model clearing
         
         # Clear any FSM state
         await state.clear()
