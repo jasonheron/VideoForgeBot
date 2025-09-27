@@ -2023,8 +2023,8 @@ async def setup_webhook(app):
         # Initialize HTTP session first
         await init_http_session()
         
-        # Set webhook URL with Telegram
-        webhook_url = f"{WEBHOOK_URL}/webhook"
+        # Set webhook URL with Telegram (clean up any double slashes)
+        webhook_url = f"{WEBHOOK_URL.rstrip('/')}/webhook"
         await bot.set_webhook(
             url=webhook_url,
             drop_pending_updates=True,
@@ -2090,7 +2090,7 @@ def main():
         app = asyncio.run(create_web_app())
         
         logger.info(f"Starting BRS Telegram Bot server on port {port}")
-        logger.info(f"Callback URL: {WEBHOOK_URL}/brs_callback")
+        logger.info(f"Callback URL: {WEBHOOK_URL.rstrip('/')}/brs_callback")
         
         # Run the web application - this will trigger startup hooks
         web.run_app(app, host='0.0.0.0', port=port)
