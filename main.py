@@ -55,8 +55,35 @@ MODELS_FILE = "user_models.json"
 user_models: Dict[int, str] = {}  # Store selected model per user
 pending_generations: Dict[str, dict] = {}  # Track pending generations
 
+def get_credit_account_id(message: Message) -> int:
+    """
+    Get the appropriate credit account ID based on chat type.
+    For private chats: use user_id
+    For groups: use chat_id (negative number)
+    """
+    if message.chat.type in ['group', 'supergroup']:
+        return message.chat.id  # Negative number for groups
+    else:
+        return message.from_user.id if message.from_user else 0  # User ID for private chats
+
+def is_group_chat(message: Message) -> bool:
+    """Check if message is from a group chat"""
+    return message.chat.type in ['group', 'supergroup']
+
+def get_callback_account_id(callback: CallbackQuery) -> int:
+    """Get account ID for callback based on message source"""
+    if callback.message and callback.message.chat.type in ['group', 'supergroup']:
+        return callback.message.chat.id  # Group ID (negative)
+    elif callback.from_user:
+        return callback.from_user.id  # User ID (positive)
+    else:
+        return 0
+
 def load_user_credits() -> Dict[int, int]:
-    """Load user credits from persistent storage"""
+    """
+    Load credits from persistent storage.
+    Supports both user credits (positive IDs) and group credits (negative IDs)
+    """
     try:
         if os.path.exists(CREDITS_FILE):
             with open(CREDITS_FILE, 'r') as f:
@@ -69,7 +96,10 @@ def load_user_credits() -> Dict[int, int]:
         return {}
 
 def save_user_credits():
-    """Save user credits to persistent storage"""
+    """
+    Save credits to persistent storage.
+    Supports both user credits (positive IDs) and group credits (negative IDs)
+    """
     try:
         with open(CREDITS_FILE, 'w') as f:
             json.dump(user_credits, f, indent=2)
@@ -140,25 +170,49 @@ class GenerationStates(StatesGroup):
     waiting_for_image = State()
 
 # Helper functions
+def get_credits(account_id: int) -> int:
+    """
+    Get credits for account (user or group).
+    Positive IDs = user accounts, Negative IDs = group accounts
+    """
+    if account_id == 0:
+        logger.error("Invalid account_id: 0 - cannot retrieve credits")
+        return 0
+    return user_credits.get(account_id, 0)
+
 def get_user_credits(user_id: int) -> int:
-    """Get user credits"""
-    return user_credits.get(user_id, 0)
+    """Legacy function for backward compatibility"""
+    return get_credits(user_id)
 
-def add_credits(user_id: int, amount: int):
-    """Add credits to user"""
-    if user_id not in user_credits:
-        user_credits[user_id] = 0
-    user_credits[user_id] += amount
+def add_credits(account_id: int, amount: int):
+    """
+    Add credits to account (user or group).
+    Positive IDs = user accounts, Negative IDs = group accounts
+    """
+    if account_id == 0:
+        logger.error("Invalid account_id: 0 - cannot add credits")
+        return
+    if account_id not in user_credits:
+        user_credits[account_id] = 0
+    user_credits[account_id] += amount
     save_user_credits()  # Save to persistent storage
-    logger.info(f"Added {amount} credits to user {user_id}. Total: {user_credits[user_id]}")
+    account_type = "group" if account_id < 0 else "user"
+    logger.info(f"Added {amount} credits to {account_type} {account_id}. Total: {user_credits[account_id]}")
 
-def deduct_credits(user_id: int, amount: int) -> bool:
-    """Deduct credits from user. Returns True if successful."""
-    current_credits = get_user_credits(user_id)
+def deduct_credits(account_id: int, amount: int) -> bool:
+    """
+    Deduct credits from account (user or group). Returns True if successful.
+    Positive IDs = user accounts, Negative IDs = group accounts
+    """
+    if account_id == 0:
+        logger.error("Invalid account_id: 0 - cannot deduct credits")
+        return False
+    current_credits = get_credits(account_id)
     if current_credits >= amount:
-        user_credits[user_id] = current_credits - amount
+        user_credits[account_id] = current_credits - amount
         save_user_credits()  # Save to persistent storage
-        logger.info(f"Deducted {amount} credits from user {user_id}. Remaining: {user_credits[user_id]}")
+        account_type = "group" if account_id < 0 else "user"
+        logger.info(f"Deducted {amount} credits from {account_type} {account_id}. Remaining: {user_credits[account_id]}")
         return True
     return False
 
@@ -420,7 +474,8 @@ async def cmd_start(message: Message):
         
     try:
         user_id = message.from_user.id
-        credits = get_user_credits(user_id)
+        account_id = get_credit_account_id(message)
+        credits = get_credits(account_id)
         
         welcome_text = f"""
 🎬 **Welcome to AI Video Generator Bot!**
@@ -473,7 +528,8 @@ async def cmd_reset(message: Message, state: FSMContext):
         # Clear FSM state
         await state.clear()
         
-        credits = get_user_credits(user_id)
+        account_id = get_credit_account_id(message)
+        credits = get_credits(account_id)
         
         await message.answer(
             "🔄 **Reset Complete!**\n\n"
@@ -543,7 +599,8 @@ async def cmd_generate(message: Message, state: FSMContext):
         
     try:
         user_id = message.from_user.id
-        credits = get_user_credits(user_id)
+        account_id = get_credit_account_id(message)
+        credits = get_credits(account_id)
         
         if credits < 1:
             no_credits_keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -661,7 +718,8 @@ async def quick_generate_callback(callback: CallbackQuery, state: FSMContext):
     
     try:
         user_id = callback.from_user.id
-        credits = get_user_credits(user_id)
+        account_id = get_callback_account_id(callback)
+        credits = get_credits(account_id)
         
         if credits < 1:
             no_credits_keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -738,7 +796,8 @@ async def buy_credits_callback(callback: CallbackQuery):
         
     try:
         user_id = callback.from_user.id
-        credits = get_user_credits(user_id)
+        account_id = get_callback_account_id(callback)
+        credits = get_credits(account_id)
         
         # Create enhanced buy menu
         buy_keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -795,7 +854,8 @@ async def user_stats_callback(callback: CallbackQuery):
         
     try:
         user_id = callback.from_user.id
-        credits = get_user_credits(user_id)
+        account_id = get_callback_account_id(callback)
+        credits = get_credits(account_id)
         user_name = callback.from_user.first_name or "User"
         
         # Count pending generations for this user
@@ -1167,7 +1227,8 @@ async def show_packages_callback(callback: CallbackQuery):
         
     try:
         user_id = callback.from_user.id
-        credits = get_user_credits(user_id)
+        account_id = get_callback_account_id(callback)
+        credits = get_credits(account_id)
         
         # Create credit packages keyboard
         packages_keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -1297,7 +1358,8 @@ async def back_to_start_callback(callback: CallbackQuery):
         
     try:
         user_id = callback.from_user.id
-        credits = get_user_credits(user_id)
+        account_id = get_callback_account_id(callback)
+        credits = get_credits(account_id)
         
         welcome_text = f"""
 🎬 **Welcome to AI Video Generator Bot!**
@@ -1463,7 +1525,8 @@ async def process_image_or_skip(message: Message, state: FSMContext):
             return
         
         # Deduct credits
-        if not deduct_credits(user_id, 1):
+        account_id = get_credit_account_id(message)
+        if not deduct_credits(account_id, 1):
             await message.answer("❌ Insufficient credits!")
             await state.clear()
             return
@@ -1510,6 +1573,7 @@ async def process_image_or_skip(message: Message, state: FSMContext):
             # Store pending generation
             pending_generations[generation_id] = {
                 "user_id": user_id,
+                "account_id": account_id,  # Store the account that was charged
                 "prompt": prompt,
                 "model": model,
                 "image_path": image_path
@@ -1536,7 +1600,8 @@ async def process_image_or_skip(message: Message, state: FSMContext):
             
         except Exception as e:
             # Refund credits on error
-            add_credits(user_id, 1)
+            account_id = get_credit_account_id(message)
+            add_credits(account_id, 1)
             await message.answer(f"❌ Error starting generation: {str(e)}\nCredits refunded.")
             logger.error(f"Generation error for user {user_id}: {e}")
         
@@ -1595,7 +1660,8 @@ async def cmd_buy(message: Message):
         
     try:
         user_id = message.from_user.id
-        credits = get_user_credits(user_id)
+        account_id = get_credit_account_id(message)
+        credits = get_credits(account_id)
         
         # Create credit packages keyboard
         packages_keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -1674,6 +1740,7 @@ async def process_successful_payment(message: Message):
             
             credits_to_add = credit_packages.get(package_stars, 0)
             if credits_to_add > 0:
+                # For payments, always use user ID (payments are personal)
                 add_credits(user_id, credits_to_add)
                 total_credits = get_user_credits(user_id)
                 
@@ -1825,17 +1892,26 @@ async def brs_callback(request):
                         logger.info(f"✅ Cleared model selection for user {user_id}")
                 else:
                     logger.error("❌ No video URLs in successful callback")
-                    add_credits(user_id, 1)
+                    # For failure refunds, use the original generation's account type
+                    gen_data = pending_generations.get(generation_id, {})
+                    original_account_id = gen_data.get("account_id", user_id)
+                    add_credits(original_account_id, 1)
                     await send_failure_message(user_id, generation_id)
             except (json.JSONDecodeError, IndexError, TypeError) as e:
                 logger.error(f"❌ Error parsing resultUrls: {e}")
                 logger.error(f"Raw resultUrls data: {result_urls_str} (type: {type(result_urls_str)})")
-                add_credits(user_id, 1)
+                # For failure refunds, use the original generation's account type
+                gen_data = pending_generations.get(generation_id, {})
+                original_account_id = gen_data.get("account_id", user_id)
+                add_credits(original_account_id, 1)
                 await send_failure_message(user_id, generation_id)
         else:
             # Failure - refund credits
             logger.info(f"Video generation failed: {msg}")
-            add_credits(user_id, 1)
+            # For failure refunds, use the original generation's account type
+            gen_data = pending_generations.get(generation_id, {})
+            original_account_id = gen_data.get("account_id", user_id)
+            add_credits(original_account_id, 1)
             await send_failure_message(user_id, generation_id)
         
         # Clean up
@@ -2200,7 +2276,8 @@ async def reset_model_selection(callback: CallbackQuery, state: FSMContext):
         # Clear any FSM state
         await state.clear()
         
-        credits = get_user_credits(user_id)
+        account_id = get_callback_account_id(callback)
+        credits = get_credits(account_id)
         keyboard = create_model_selection_keyboard()
         
         await safe_edit_message(
