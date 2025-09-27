@@ -1865,7 +1865,7 @@ async def send_failure_message(user_id: int, generation_id: str):
                 "• Try a different model\n"
                 "• Ensure stable internet connection\n"
                 "• Contact support if this persists\n\n"
-                "📞 **Support:** @your_support_bot\n\n"
+                "📞 **Support:** @niftysolsol\n\n"
                 "👆 **Quick actions below:**"
             ),
             reply_markup=retry_keyboard,
