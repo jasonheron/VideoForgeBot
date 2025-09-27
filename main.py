@@ -238,7 +238,7 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
             "aspectRatio": "16:9",
             "enableFallback": False,
             "enableTranslation": True,
-            "callBackUrl": f"{WEBHOOK_URL}/brs_callback"
+            "callBackUrl": f"{WEBHOOK_URL.rstrip('/')}/brs_callback"
         }
         # Add image URLs for Veo3 if provided
         if image_path:
@@ -256,7 +256,7 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
             "aspectRatio": "16:9",
             "model": "runway-duration-5-generate",
             "waterMark": "",
-            "callBackUrl": f"{WEBHOOK_URL}/brs_callback"
+            "callBackUrl": f"{WEBHOOK_URL.rstrip('/')}/brs_callback"
         }
         # Add image URL for Runway if provided
         if image_path:
@@ -298,7 +298,7 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
             
         data = {
             "model": model_name,
-            "callBackUrl": f"{WEBHOOK_URL}/brs_callback",
+            "callBackUrl": f"{WEBHOOK_URL.rstrip('/')}/brs_callback",
             "input": input_data
         }
         
@@ -336,7 +336,7 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
                 
         data = {
             "model": model_name,
-            "callBackUrl": f"{WEBHOOK_URL}/brs_callback",
+            "callBackUrl": f"{WEBHOOK_URL.rstrip('/')}/brs_callback",
             "input": input_data
         }
     else:
