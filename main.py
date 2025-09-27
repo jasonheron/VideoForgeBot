@@ -693,7 +693,7 @@ async def buy_credits_callback(callback: CallbackQuery):
         
         # Create enhanced buy menu
         buy_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⭐ Buy 1 Credit (100 Stars)", callback_data="buy_1")],
+            [InlineKeyboardButton(text="⭐ Buy 1 Credit (100 Stars)", callback_data="buy_package_100")],
             [InlineKeyboardButton(text="📊 Credit Packages", callback_data="buy_packages")],
             [InlineKeyboardButton(text="💡 How Stars Work", callback_data="help_stars")],
             [InlineKeyboardButton(text="🔙 Back to Menu", callback_data="back_main")]
@@ -1122,10 +1122,11 @@ async def show_packages_callback(callback: CallbackQuery):
         
         # Create credit packages keyboard
         packages_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🎯 Starter: 100⭐ → 12 Credits", callback_data="buy_package_100")],
-            [InlineKeyboardButton(text="🔥 Popular: 200⭐ → 25 Credits", callback_data="buy_package_200")],
-            [InlineKeyboardButton(text="💎 Best Value: 500⭐ → 75 Credits", callback_data="buy_package_500")],
-            [InlineKeyboardButton(text="👑 Ultimate: 1000⭐ → 175 Credits", callback_data="buy_package_1000")],
+            [InlineKeyboardButton(text="🎯 Starter: 100⭐ → 1 Credit", callback_data="buy_package_100")],
+            [InlineKeyboardButton(text="🔥 Popular: 1000⭐ → 12 Credits", callback_data="buy_package_1000")],
+            [InlineKeyboardButton(text="💎 Best Value: 2000⭐ → 25 Credits", callback_data="buy_package_2000")],
+            [InlineKeyboardButton(text="🚀 Premium: 5000⭐ → 75 Credits", callback_data="buy_package_5000")],
+            [InlineKeyboardButton(text="👑 Ultimate: 10000⭐ → 175 Credits", callback_data="buy_package_10000")],
             [InlineKeyboardButton(text="🔙 Back to Menu", callback_data="back_to_start")]
         ])
         
@@ -1133,17 +1134,20 @@ async def show_packages_callback(callback: CallbackQuery):
             "⭐ **Credit Packages - Telegram Stars**\n\n"
             f"💳 **Current Balance:** {credits} credits\n\n"
             "🎯 **Starter Package**\n"
-            "• 100 Stars → 12 Credits\n"
-            "• Great for trying out models\n\n"
-            "🔥 **Popular Choice** (25% Bonus!)\n"
-            "• 200 Stars → 25 Credits\n"
-            "• Perfect for regular users\n\n"
-            "💎 **Best Value** (50% Bonus!)\n"
-            "• 500 Stars → 75 Credits\n"
-            "• Maximum savings per credit\n\n"
-            "👑 **Ultimate Package** (75% Bonus!)\n"
-            "• 1000 Stars → 175 Credits\n"
-            "• For power users and creators\n\n"
+            "• 100 Stars → 1 Credit\n"
+            "• Perfect for trying out models\n\n"
+            "🔥 **Popular Choice**\n"
+            "• 1000 Stars → 12 Credits\n"
+            "• Great value for regular users\n\n"
+            "💎 **Best Value**\n"
+            "• 2000 Stars → 25 Credits\n"
+            "• More credits per star\n\n"
+            "🚀 **Premium Package**\n"
+            "• 5000 Stars → 75 Credits\n"
+            "• Excellent savings per credit\n\n"
+            "👑 **Ultimate Package**\n"
+            "• 10000 Stars → 175 Credits\n"
+            "• Maximum value for power users\n\n"
             "✨ **All packages include:**\n"
             "• Access to all 5 AI models\n"
             "• Image-to-video support\n"
@@ -1182,10 +1186,11 @@ async def buy_package_callback(callback: CallbackQuery):
         
         # Package details
         packages = {
-            100: {"credits": 12, "title": "Starter Package", "description": "12 credits for video generation"},
-            200: {"credits": 25, "title": "Popular Package", "description": "25 credits with 25% bonus"},
-            500: {"credits": 75, "title": "Best Value Package", "description": "75 credits with 50% bonus"},
-            1000: {"credits": 175, "title": "Ultimate Package", "description": "175 credits with 75% bonus"}
+            100: {"credits": 1, "title": "Starter Package", "description": "1 credit for video generation"},
+            1000: {"credits": 12, "title": "Popular Package", "description": "12 credits for video generation"},
+            2000: {"credits": 25, "title": "Best Value Package", "description": "25 credits for video generation"},
+            5000: {"credits": 75, "title": "Premium Package", "description": "75 credits for video generation"},
+            10000: {"credits": 175, "title": "Ultimate Package", "description": "175 credits for video generation"}
         }
         
         if package_stars not in packages:
@@ -1544,10 +1549,11 @@ async def cmd_buy(message: Message):
         
         # Create credit packages keyboard
         packages_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🎯 Starter: 100⭐ → 12 Credits", callback_data="buy_package_100")],
-            [InlineKeyboardButton(text="🔥 Popular: 200⭐ → 25 Credits", callback_data="buy_package_200")],
-            [InlineKeyboardButton(text="💎 Best Value: 500⭐ → 75 Credits", callback_data="buy_package_500")],
-            [InlineKeyboardButton(text="👑 Ultimate: 1000⭐ → 175 Credits", callback_data="buy_package_1000")],
+            [InlineKeyboardButton(text="🎯 Starter: 100⭐ → 1 Credit", callback_data="buy_package_100")],
+            [InlineKeyboardButton(text="🔥 Popular: 1000⭐ → 12 Credits", callback_data="buy_package_1000")],
+            [InlineKeyboardButton(text="💎 Best Value: 2000⭐ → 25 Credits", callback_data="buy_package_2000")],
+            [InlineKeyboardButton(text="🚀 Premium: 5000⭐ → 75 Credits", callback_data="buy_package_5000")],
+            [InlineKeyboardButton(text="👑 Ultimate: 10000⭐ → 175 Credits", callback_data="buy_package_10000")],
             [InlineKeyboardButton(text="🔙 Back to Menu", callback_data="back_to_start")]
         ])
         
@@ -1555,17 +1561,20 @@ async def cmd_buy(message: Message):
             "⭐ **Credit Packages - Telegram Stars**\n\n"
             f"💳 **Current Balance:** {credits} credits\n\n"
             "🎯 **Starter Package**\n"
-            "• 100 Stars → 12 Credits\n"
-            "• Great for trying out models\n\n"
-            "🔥 **Popular Choice** (25% Bonus!)\n"
-            "• 200 Stars → 25 Credits\n"
-            "• Perfect for regular users\n\n"
-            "💎 **Best Value** (50% Bonus!)\n"
-            "• 500 Stars → 75 Credits\n"
-            "• Maximum savings per credit\n\n"
-            "👑 **Ultimate Package** (75% Bonus!)\n"
-            "• 1000 Stars → 175 Credits\n"
-            "• For power users and creators\n\n"
+            "• 100 Stars → 1 Credit\n"
+            "• Perfect for trying out models\n\n"
+            "🔥 **Popular Choice**\n"
+            "• 1000 Stars → 12 Credits\n"
+            "• Great value for regular users\n\n"
+            "💎 **Best Value**\n"
+            "• 2000 Stars → 25 Credits\n"
+            "• More credits per star\n\n"
+            "🚀 **Premium Package**\n"
+            "• 5000 Stars → 75 Credits\n"
+            "• Excellent savings per credit\n\n"
+            "👑 **Ultimate Package**\n"
+            "• 10000 Stars → 175 Credits\n"
+            "• Maximum value for power users\n\n"
             "✨ **All packages include:**\n"
             "• Access to all 5 AI models\n"
             "• Image-to-video support\n"
@@ -1606,10 +1615,11 @@ async def process_successful_payment(message: Message):
             
             # Credit mapping
             credit_packages = {
-                100: 12,
-                200: 25,
-                500: 75,
-                1000: 175
+                100: 1,
+                1000: 12,
+                2000: 25,
+                5000: 75,
+                10000: 175
             }
             
             credits_to_add = credit_packages.get(package_stars, 0)
@@ -1617,20 +1627,11 @@ async def process_successful_payment(message: Message):
                 add_credits(user_id, credits_to_add)
                 total_credits = get_user_credits(user_id)
                 
-                # Calculate bonus
-                base_credits = package_stars // 100 * 12  # Base rate
-                bonus_credits = credits_to_add - base_credits
-                
                 success_text = (
                     "🎉 **Payment Successful!**\n\n"
                     f"⭐ **Purchased:** {package_stars} Telegram Stars\n"
-                    f"💳 **Credits Added:** {credits_to_add}\n"
+                    f"💳 **Credits Added:** {credits_to_add}\n\n"
                 )
-                
-                if bonus_credits > 0:
-                    success_text += f"🎁 **Bonus Credits:** +{bonus_credits} free!\n\n"
-                else:
-                    success_text += "\n"
                     
                 success_text += (
                     f"💰 **New Balance:** {total_credits} total credits\n\n"
