@@ -1573,6 +1573,7 @@ async def process_image_or_skip(message: Message, state: FSMContext):
             # Store pending generation
             pending_generations[generation_id] = {
                 "user_id": user_id,
+                "chat_id": message.chat.id,  # Store original chat for video delivery
                 "account_id": account_id,  # Store the account that was charged
                 "prompt": prompt,
                 "model": model,
@@ -1882,8 +1883,11 @@ async def brs_callback(request):
                 
                 if result_urls and len(result_urls) > 0:
                     video_url = result_urls[0]  # Use first video URL
-                    logger.info(f"🎬 Sending video to user {user_id}: {video_url}")
-                    await send_video_to_user(user_id, video_url, generation_id)
+                    # Get original chat_id from pending generation
+                    gen_data = pending_generations.get(generation_id, {})
+                    original_chat_id = gen_data.get("chat_id", user_id)  # Fallback to user_id
+                    logger.info(f"🎬 Sending video to chat {original_chat_id} (user {user_id}): {video_url}")
+                    await send_video_to_chat(original_chat_id, video_url, generation_id)
                     
                     # Clear selected model after successful generation
                     if user_id in user_models:
@@ -1895,8 +1899,9 @@ async def brs_callback(request):
                     # For failure refunds, use the original generation's account type
                     gen_data = pending_generations.get(generation_id, {})
                     original_account_id = gen_data.get("account_id", user_id)
+                    original_chat_id = gen_data.get("chat_id", user_id)
                     add_credits(original_account_id, 1)
-                    await send_failure_message(user_id, generation_id)
+                    await send_failure_message(original_chat_id, generation_id)
             except (json.JSONDecodeError, IndexError, TypeError) as e:
                 logger.error(f"❌ Error parsing resultUrls: {e}")
                 logger.error(f"Raw resultUrls data: {result_urls_str} (type: {type(result_urls_str)})")
@@ -1934,8 +1939,8 @@ async def brs_callback(request):
         logger.error(f"Error processing callback: {e}")
         return web.json_response({"error": "Internal server error"}, status=500)
 
-async def send_video_to_user(user_id: int, video_url: str, generation_id: str):
-    """Send completed video to user using aiohttp"""
+async def send_video_to_chat(chat_id: int, video_url: str, generation_id: str):
+    """Send completed video to chat (user or group) using aiohttp"""
     try:
         global http_session
         if not http_session:
@@ -1950,31 +1955,31 @@ async def send_video_to_user(user_id: int, video_url: str, generation_id: str):
                 video_file = BufferedInputFile(video_content, filename=f"video_{generation_id}.mp4")
                 
                 await bot.send_video(
-                    chat_id=user_id,
+                    chat_id=chat_id,
                     video=video_file,
                     caption="🎬 Your video is ready!"
                 )
-                logger.info(f"Successfully sent video to user {user_id}")
+                logger.info(f"Successfully sent video to chat {chat_id}")
             else:
                 # If download fails, send the URL instead
                 await bot.send_message(
-                    chat_id=user_id,
+                    chat_id=chat_id,
                     text=f"✅ Video generated successfully!\nDownload: {video_url}"
                 )
                 logger.warning(f"Could not download video from {video_url}, sent URL instead")
                 
     except Exception as e:
-        logger.error(f"Error sending video to user {user_id}: {e}")
+        logger.error(f"Error sending video to chat {chat_id}: {e}")
         try:
             await bot.send_message(
-                chat_id=user_id,
+                chat_id=chat_id,
                 text=f"✅ Video generated successfully!\nDownload: {video_url}"
             )
         except Exception as send_error:
-            logger.error(f"Error sending fallback message to user {user_id}: {send_error}")
+            logger.error(f"Error sending fallback message to chat {chat_id}: {send_error}")
 
-async def send_failure_message(user_id: int, generation_id: str):
-    """Send enhanced failure message to user"""
+async def send_failure_message(chat_id: int, generation_id: str):
+    """Send enhanced failure message to chat (user or group)"""
     try:
         retry_keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔄 Try Again", callback_data="quick_generate")],
@@ -1983,7 +1988,7 @@ async def send_failure_message(user_id: int, generation_id: str):
         ])
         
         await bot.send_message(
-            chat_id=user_id,
+            chat_id=chat_id,
             text=(
                 "❌ **Video Generation Failed**\n\n"
                 f"Generation ID: `{generation_id}`\n\n"
@@ -1999,9 +2004,9 @@ async def send_failure_message(user_id: int, generation_id: str):
             reply_markup=retry_keyboard,
             parse_mode="Markdown"
         )
-        logger.info(f"Sent enhanced failure message to user {user_id}")
+        logger.info(f"Sent enhanced failure message to chat {chat_id}")
     except Exception as e:
-        logger.error(f"Error sending failure message to user {user_id}: {e}")
+        logger.error(f"Error sending failure message to chat {chat_id}: {e}")
 
 async def health_check(request):
     """Primary health check handler for Cloud Run deployment"""
