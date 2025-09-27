@@ -1028,24 +1028,34 @@ async def skip_image_callback(callback: CallbackQuery, state: FSMContext):
         # Simulate typing 'skip'
         data = await state.get_data()
         if data.get('prompt'):
-            # Create a mock message with 'skip' text
+            # Create a mock message with 'skip' text that includes the necessary properties for cleanup
             class MockMessage:
-                def __init__(self, user, text):
+                def __init__(self, user, text, chat, message_id):
                     self.from_user = user
                     self.text = text
                     self.photo = None
+                    self.chat = chat
+                    self.message_id = message_id
                 
                 async def answer(self, text, **kwargs):
                     # Send message through callback query instead
                     try:
                         if callback.message:
-                            await callback.message.answer(text, **kwargs)
+                            return await callback.message.answer(text, **kwargs)
                         else:
                             logger.error("Callback message is None")
+                            return None
                     except Exception as e:
                         logger.error(f"Failed to send mock message answer: {e}")
+                        return None
             
-            mock_message = MockMessage(callback.from_user, 'skip')
+            # Use callback message properties for the mock message
+            mock_message = MockMessage(
+                callback.from_user, 
+                'skip',
+                callback.message.chat if callback.message else None,
+                callback.message.message_id if callback.message else 0
+            )
             await process_image_or_skip(mock_message, state)
         
         await callback.answer("⏭️ Skipping image upload...")
@@ -1560,23 +1570,49 @@ async def process_prompt(message: Message, state: FSMContext):
             return
             
         prompt = message.text
-        await state.update_data(prompt=prompt)
+        is_group = is_group_chat(message)
         
-        # Enhanced image prompt with skip keyboard
+        # Generate a unique generation ID for tracking
+        user_id = message.from_user.id if message.from_user else 0
+        generation_id = f"gen_{int(time.time() * 1000)}_{user_id}"
+        
+        # Store prompt and generation info in state
+        await state.update_data(prompt=prompt, generation_id=generation_id)
+        
+        # Track user prompt message for cleanup in groups
+        if is_group:
+            track_message_for_cleanup(generation_id, message.message_id, message.chat.id, "user")
+        
+        # Enhanced image prompt with skip keyboard  
         skip_keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⏭️ Skip Image", callback_data="skip_image")],
             [InlineKeyboardButton(text="❓ Image Tips", callback_data="help_image")]
         ])
         
-        await message.answer(
-            "🖼️ **Step 2:** Upload an image (optional)\n\n"
-            "📸 **Supported formats:** JPG, PNG, WebP, GIF\n"
-            "📏 **Best quality:** High resolution (1024x1024+)\n\n"
-            "💡 **Pro tip:** Images work great with I2V models!\n\n"
-            "📤 **Upload your image now** or tap Skip to continue:",
-            reply_markup=skip_keyboard,
-            parse_mode="Markdown"
-        )
+        # Different UI for groups vs private chats
+        if is_group:
+            # Simplified message for groups
+            response_msg = await message.answer(
+                "📸 **Upload image or type 'skip'**",
+                reply_markup=skip_keyboard,
+                parse_mode="Markdown"
+            )
+        else:
+            # Full detailed message for private chats
+            response_msg = await message.answer(
+                "🖼️ **Step 2:** Upload an image (optional)\n\n"
+                "📸 **Supported formats:** JPG, PNG, WebP, GIF\n"
+                "📏 **Best quality:** High resolution (1024x1024+)\n\n"
+                "💡 **Pro tip:** Images work great with I2V models!\n\n"
+                "📤 **Upload your image now** or tap Skip to continue:",
+                reply_markup=skip_keyboard,
+                parse_mode="Markdown"
+            )
+        
+        # Track bot response for cleanup in groups
+        if is_group:
+            track_message_for_cleanup(generation_id, response_msg.message_id, message.chat.id, "bot")
+        
         await state.set_state(GenerationStates.waiting_for_image)
         
     except Exception as e:
@@ -1639,12 +1675,26 @@ async def process_image_or_skip(message: Message, state: FSMContext):
             await state.clear()
             return
         
-        # Send to BRS AI API with enhanced progress tracking
+        # Send to BRS AI API with enhanced progress tracking  
         try:
-            # Initial progress message
-            progress_msg = await message.answer(
-                "🎬 **Starting Video Generation**\n\n"
-                "⏳ **Status:** Initializing request...\n"
+            # Get generation ID from state
+            data = await state.get_data()
+            generation_id = data.get("generation_id", f"gen_{int(time.time() * 1000)}_{user_id}")
+            is_group = is_group_chat(message)
+            
+            # Track user's image upload or skip message for cleanup in groups
+            if is_group:
+                track_message_for_cleanup(generation_id, message.message_id, message.chat.id, "user")
+            
+            # Simplified progress message for groups, detailed for private chats
+            if is_group:
+                progress_msg = await message.answer("🎬 **Generating...**")
+                # Track the progress message for cleanup
+                track_message_for_cleanup(generation_id, progress_msg.message_id, message.chat.id, "bot")
+            else:
+                progress_msg = await message.answer(
+                    "🎬 **Starting Video Generation**\n\n"
+                    "⏳ **Status:** Initializing request...\n"
                 f"🤖 **Model:** {AVAILABLE_MODELS[model]}\n"
                 f"📝 **Prompt:** _{prompt[:50]}{'...' if len(prompt) > 50 else ''}_\n\n"
                 "⏱️ **Estimated time:** 2-5 minutes\n"
@@ -1652,34 +1702,52 @@ async def process_image_or_skip(message: Message, state: FSMContext):
                 parse_mode="Markdown"
             )
             
-            generation_id = await send_to_brs_api(prompt, model, image_path)
+            task_id = await send_to_brs_api(prompt, model, image_path)
             
-            # Update progress with generation ID
-            try:
-                await progress_msg.edit_text(
-                    "✅ **Video Generation Started**\n\n"
-                    f"🆔 **Generation ID:** `{generation_id}`\n"
-                    f"🤖 **Model:** {AVAILABLE_MODELS[model]}\n"
-                    f"📝 **Prompt:** _{prompt[:50]}{'...' if len(prompt) > 50 else ''}_\n\n"
-                    "🎬 **Processing steps:**\n"
-                    "✅ Request submitted\n"
-                    "⏳ Analyzing prompt...\n"
-                    "⏳ Generating video...\n"
-                    "⏳ Finalizing output...\n\n"
-                    "🔔 **You'll be notified when ready!**",
-                    parse_mode="Markdown"
-                )
-            except Exception:
-                # If edit fails, send new message
-                await message.answer(
-                    "✅ **Video Generation Started**\n\n"
-                    f"🆔 **Generation ID:** `{generation_id}`\n"
-                    "🔔 **You'll be notified when ready!**",
-                    parse_mode="Markdown"
-                )
+            # Migrate message cleanup records from temporary generation_id to actual task_id
+            if generation_id in message_cleanup:
+                # Move cleanup data to task_id key
+                cleanup_data = message_cleanup[generation_id]
+                if task_id in message_cleanup:
+                    # Merge with existing task_id data
+                    existing_data = message_cleanup[task_id]
+                    existing_data["messages"].extend(cleanup_data.get("messages", []))
+                    logger.info(f"Merged cleanup data for {task_id}")
+                else:
+                    # Simple migration
+                    message_cleanup[task_id] = cleanup_data
+                del message_cleanup[generation_id]
+                save_message_cleanup()
+                logger.info(f"Migrated cleanup records from {generation_id} to {task_id}")
+                logger.info(f"Total messages tracked for cleanup: {len(message_cleanup[task_id].get('messages', []))}")
             
-            # Store pending generation
-            pending_generations[generation_id] = {
+            # Update progress with task ID (only for private chats)
+            if not is_group:
+                try:
+                    await progress_msg.edit_text(
+                        "✅ **Video Generation Started**\n\n"
+                        f"🆔 **Generation ID:** `{task_id}`\n"
+                        f"🤖 **Model:** {AVAILABLE_MODELS[model]}\n"
+                        f"📝 **Prompt:** _{prompt[:50]}{'...' if len(prompt) > 50 else ''}_\n\n"
+                        "🎬 **Processing steps:**\n"
+                        "✅ Request submitted\n"
+                        "⏳ Analyzing prompt...\n"
+                        "⏳ Generating video...\n"
+                        "⏳ Finalizing output...\n\n"
+                        "🔔 **You'll be notified when ready!**",
+                        parse_mode="Markdown"
+                    )
+                except Exception:
+                    # If edit fails, send new message
+                    await message.answer(
+                        "✅ **Video Generation Started**\n\n"
+                        f"🆔 **Generation ID:** `{task_id}`\n"
+                        "🔔 **You'll be notified when ready!**",
+                        parse_mode="Markdown"
+                    )
+            
+            # Store pending generation with task_id
+            pending_generations[task_id] = {
                 "user_id": user_id,
                 "chat_id": message.chat.id,  # Store original chat for video delivery
                 "account_id": account_id,  # Store the account that was charged
@@ -1689,23 +1757,26 @@ async def process_image_or_skip(message: Message, state: FSMContext):
             }
             save_pending_generations()  # Persist generation data
             
-            # Final confirmation with helpful info
-            final_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📊 Check Status", callback_data="user_stats")],
-                [InlineKeyboardButton(text="🎬 Generate Another", callback_data="quick_generate")]
-            ])
+            # Note: Progress message was already tracked under generation_id and migrated to task_id above
             
-            await message.answer(
-                "🎉 **Generation in Progress!**\n\n"
-                f"🆔 **Tracking ID:** `{generation_id}`\n\n"
-                "⏰ **What happens next:**\n"
-                "• Processing usually takes 2-5 minutes\n"
-                "• You'll get a notification when ready\n"
-                "• Video will be delivered directly to this chat\n\n"
-                "🔄 **You can generate more videos while waiting!**",
-                reply_markup=final_keyboard,
-                parse_mode="Markdown"
-            )
+            # Final confirmation with helpful info (only for private chats)
+            if not is_group:
+                final_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📊 Check Status", callback_data="user_stats")],
+                    [InlineKeyboardButton(text="🎬 Generate Another", callback_data="quick_generate")]
+                ])
+                
+                await message.answer(
+                    "🎉 **Generation in Progress!**\n\n"
+                    f"🆔 **Tracking ID:** `{task_id}`\n\n"
+                    "⏰ **What happens next:**\n"
+                    "• Processing usually takes 2-5 minutes\n"
+                    "• You'll get a notification when ready\n"
+                    "• Video will be delivered directly to this chat\n\n"
+                    "🔄 **You can generate more videos while waiting!**",
+                    reply_markup=final_keyboard,
+                    parse_mode="Markdown"
+                )
             
         except Exception as e:
             # Refund credits on error
@@ -2062,29 +2133,40 @@ async def send_video_to_chat(chat_id: int, video_url: str, generation_id: str):
                 # Create video file for sending
                 video_file = BufferedInputFile(video_content, filename=f"video_{generation_id}.mp4")
                 
-                await bot.send_video(
+                video_msg = await bot.send_video(
                     chat_id=chat_id,
                     video=video_file,
                     caption="🎬 Your video is ready!"
                 )
                 logger.info(f"Successfully sent video to chat {chat_id}")
+                
+                # Clean up all intermediate messages in groups, keep only the final video
+                await cleanup_generation_messages(generation_id, keep_final_message_id=video_msg.message_id)
+                
             else:
                 # If download fails, send the URL instead
-                await bot.send_message(
+                fallback_msg = await bot.send_message(
                     chat_id=chat_id,
                     text=f"✅ Video generated successfully!\nDownload: {video_url}"
                 )
                 logger.warning(f"Could not download video from {video_url}, sent URL instead")
                 
+                # Clean up all intermediate messages in groups, keep only the final message
+                await cleanup_generation_messages(generation_id, keep_final_message_id=fallback_msg.message_id)
+                
     except Exception as e:
         logger.error(f"Error sending video to chat {chat_id}: {e}")
         try:
-            await bot.send_message(
+            fallback_msg = await bot.send_message(
                 chat_id=chat_id,
                 text=f"✅ Video generated successfully!\nDownload: {video_url}"
             )
+            # Clean up all intermediate messages in groups, keep only the final message
+            await cleanup_generation_messages(generation_id, keep_final_message_id=fallback_msg.message_id)
         except Exception as send_error:
             logger.error(f"Error sending fallback message to chat {chat_id}: {send_error}")
+            # Clean up all intermediate messages even if fallback fails
+            await cleanup_generation_messages(generation_id)
 
 async def send_failure_message(chat_id: int, generation_id: str):
     """Send enhanced failure message to chat (user or group)"""
@@ -2095,7 +2177,7 @@ async def send_failure_message(chat_id: int, generation_id: str):
              InlineKeyboardButton(text="💳 Check Credits", callback_data="user_stats")]
         ])
         
-        await bot.send_message(
+        failure_msg = await bot.send_message(
             chat_id=chat_id,
             text=(
                 "❌ **Video Generation Failed**\n\n"
@@ -2113,8 +2195,14 @@ async def send_failure_message(chat_id: int, generation_id: str):
             parse_mode="Markdown"
         )
         logger.info(f"Sent enhanced failure message to chat {chat_id}")
+        
+        # Clean up all intermediate messages in groups, keep only the final failure message
+        await cleanup_generation_messages(generation_id, keep_final_message_id=failure_msg.message_id)
+        
     except Exception as e:
         logger.error(f"Error sending failure message to chat {chat_id}: {e}")
+        # Clean up intermediate messages even if failure message fails
+        await cleanup_generation_messages(generation_id)
 
 async def health_check(request):
     """Primary health check handler for Cloud Run deployment"""
