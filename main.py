@@ -1875,14 +1875,16 @@ async def send_failure_message(user_id: int, generation_id: str):
     except Exception as e:
         logger.error(f"Error sending failure message to user {user_id}: {e}")
 
+async def health_check(request):
+    """Primary health check handler for Cloud Run deployment"""
+    return web.Response(text="OK", status=200, content_type="text/plain")
+
 async def index_handler(request):
-    """Ultra-fast health check for Cloud Run - immediate HTTP 200"""
-    # Fastest possible response for Cloud Run health checks
+    """Root endpoint handler - same as health check"""
     return web.Response(text="OK", status=200, content_type="text/plain")
 
 async def health_handler(request):
-    """Simple health check endpoint for Cloud Run"""
-    # Ultra-simple health check - just return OK
+    """Secondary health check endpoint"""
     return web.Response(text="OK", status=200, content_type="text/plain")
 
 async def serve_image(request):
@@ -2049,9 +2051,12 @@ async def create_web_app():
     
     # Add routes with explicit error handling
     try:
-        # Primary health check routes (critical for Cloud Run)
-        app.router.add_get('/', index_handler)  # Primary health check
-        app.router.add_get('/health', health_handler)  # Secondary health check
+        # Multiple health check routes for maximum Cloud Run compatibility
+        app.router.add_get('/', health_check)  # Primary root health check
+        app.router.add_get('/health', health_check)  # Standard health endpoint  
+        app.router.add_get('/healthz', health_check)  # Kubernetes style
+        app.router.add_get('/ready', health_check)  # Readiness probe
+        app.router.add_get('/alive', health_check)  # Liveness probe
         
         # Telegram webhook routes
         app.router.add_post('/webhook', webhook_handler)
@@ -2063,7 +2068,7 @@ async def create_web_app():
         # Image serving route
         app.router.add_get('/images/{filename}', serve_image)
         
-        logger.info("✅ All routes configured successfully")
+        logger.info("✅ All routes configured successfully - Health checks: /, /health, /healthz, /ready, /alive")
     except Exception as e:
         logger.error(f"❌ Error configuring routes: {e}")
         raise
