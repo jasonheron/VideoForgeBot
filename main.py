@@ -1424,14 +1424,17 @@ async def buy_package_callback(callback: CallbackQuery):
             
         package = packages[package_stars]
         
-        # Create invoice
+        # Get the account ID that should receive credits (group or user)
+        account_id = get_callback_account_id(callback)
+        
+        # Create invoice with account_id in payload
         price = LabeledPrice(label=f"{package['credits']} Video Credits", amount=package_stars)
         
         await bot.send_invoice(
             chat_id=user_id,
             title=package["title"],
             description=package["description"],
-            payload=f"credit_package_{package_stars}",
+            payload=f"credit_package_{package_stars}_account_{account_id}",
             provider_token="",  # Empty for Telegram Stars (XTR)
             currency="XTR",  # Telegram Stars
             prices=[price],
@@ -1907,7 +1910,16 @@ async def process_successful_payment(message: Message):
         
         # Parse package from payload
         if payload.startswith("credit_package_"):
-            package_stars = int(payload.replace("credit_package_", ""))
+            # Extract package_stars and account_id from payload
+            payload_parts = payload.split("_")
+            package_stars = int(payload_parts[2])  # credit_package_XXX_account_YYY
+            
+            # Check if account_id is included in payload (new format)
+            if len(payload_parts) >= 5 and payload_parts[3] == "account":
+                account_id = int(payload_parts[4])
+            else:
+                # Legacy format - use user_id
+                account_id = user_id
             
             # Credit mapping
             credit_packages = {
@@ -1920,17 +1932,22 @@ async def process_successful_payment(message: Message):
             
             credits_to_add = credit_packages.get(package_stars, 0)
             if credits_to_add > 0:
-                # For payments, always use user ID (payments are personal)
-                add_credits(user_id, credits_to_add)
-                total_credits = get_user_credits(user_id)
+                # Add credits to the correct account (group or user)
+                add_credits(account_id, credits_to_add)
+                
+                # Get the updated balance for display
+                if account_id == user_id:
+                    total_credits = get_user_credits(user_id)
+                    account_type = "personal"
+                else:
+                    total_credits = get_credits(account_id)
+                    account_type = "group"
                 
                 success_text = (
                     "🎉 **Payment Successful!**\n\n"
                     f"⭐ **Purchased:** {package_stars} Telegram Stars\n"
-                    f"💳 **Credits Added:** {credits_to_add}\n\n"
-                )
-                    
-                success_text += (
+                    f"💳 **Credits Added:** {credits_to_add}\n"
+                    f"📍 **Added to:** {account_type} account\n\n"
                     f"💰 **New Balance:** {total_credits} total credits\n\n"
                     "🎬 Ready to create videos! Use /generate to start."
                 )
