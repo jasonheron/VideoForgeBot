@@ -1876,24 +1876,14 @@ async def send_failure_message(user_id: int, generation_id: str):
         logger.error(f"Error sending failure message to user {user_id}: {e}")
 
 async def index_handler(request):
-    """Ultra-simple health check for Cloud Run deployment - guaranteed HTTP 200"""
-    # Cloud Run requires the simplest possible health check
-    # No JSON parsing, no logging, no exceptions - just immediate HTTP 200
+    """Ultra-fast health check for Cloud Run - immediate HTTP 200"""
+    # Fastest possible response for Cloud Run health checks
     return web.Response(text="OK", status=200, content_type="text/plain")
 
 async def health_handler(request):
-    """Detailed health check endpoint with fallback"""
-    try:
-        return web.json_response({
-            "status": "healthy",
-            "service": "BRS Telegram Bot", 
-            "pending_generations": len(pending_generations),
-            "user_count": len(user_credits),
-            "timestamp": int(time.time())
-        })
-    except Exception:
-        # Always return simple 200 for health checks if JSON fails
-        return web.Response(text="OK", status=200, content_type="text/plain")
+    """Simple health check endpoint for Cloud Run"""
+    # Ultra-simple health check - just return OK
+    return web.Response(text="OK", status=200, content_type="text/plain")
 
 async def serve_image(request):
     """Serve uploaded images for BRS AI to access with security hardening"""
@@ -2057,13 +2047,26 @@ async def create_web_app():
     app.on_startup.append(setup_webhook)
     app.on_cleanup.append(cleanup_webhook)
     
-    # Add routes
-    app.router.add_post('/webhook', webhook_handler)  # Telegram webhook endpoint
-    app.router.add_post('/brs_callback', brs_callback)
-    app.router.add_post('/kie_callback', brs_callback)  # Temporary redirect for old callbacks
-    app.router.add_get('/images/{filename}', serve_image)  # Add image serving endpoint
-    app.router.add_get('/', index_handler)
-    app.router.add_get('/health', health_handler)
+    # Add routes with explicit error handling
+    try:
+        # Primary health check routes (critical for Cloud Run)
+        app.router.add_get('/', index_handler)  # Primary health check
+        app.router.add_get('/health', health_handler)  # Secondary health check
+        
+        # Telegram webhook routes
+        app.router.add_post('/webhook', webhook_handler)
+        
+        # AI callback routes
+        app.router.add_post('/brs_callback', brs_callback)
+        app.router.add_post('/kie_callback', brs_callback)  # Legacy support
+        
+        # Image serving route
+        app.router.add_get('/images/{filename}', serve_image)
+        
+        logger.info("✅ All routes configured successfully")
+    except Exception as e:
+        logger.error(f"❌ Error configuring routes: {e}")
+        raise
     
     return app
 
@@ -2080,23 +2083,47 @@ async def cleanup_http_session():
         await http_session.close()
         logger.info("HTTP session closed")
 
+def validate_environment():
+    """Validate all required environment variables before startup"""
+    required_vars = ['BOT_TOKEN', 'BRS_AI_API_KEY', 'WEBHOOK_URL', 'CALLBACK_SECRET']
+    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    
+    if missing_vars:
+        error_msg = f"Missing required environment variables: {', '.join(missing_vars)}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    logger.info("✅ All required environment variables validated")
+
 def main():
     """Main function for deployment - create and run aiohttp app"""
     try:
+        # Validate environment variables first
+        validate_environment()
+        
         # Use $PORT environment variable for deployment (default to 5000 for local dev)
         port = int(os.getenv("PORT", 5000))
+        
+        logger.info(f"🚀 Starting BRS Telegram Bot server on port {port}")
+        logger.info(f"📡 Callback URL: {WEBHOOK_URL.rstrip('/')}/brs_callback")
+        logger.info(f"🤖 Bot Token: {BOT_TOKEN[:20]}...")
         
         # Create web app with startup/cleanup hooks
         app = asyncio.run(create_web_app())
         
-        logger.info(f"Starting BRS Telegram Bot server on port {port}")
-        logger.info(f"Callback URL: {WEBHOOK_URL.rstrip('/')}/brs_callback")
+        logger.info("✅ Web application created successfully")
         
         # Run the web application - this will trigger startup hooks
-        web.run_app(app, host='0.0.0.0', port=port)
+        web.run_app(app, host='0.0.0.0', port=port, access_log=None)
         
+    except ValueError as e:
+        logger.error(f"❌ Environment validation failed: {e}")
+        raise
     except Exception as e:
-        logger.error(f"Error in main: {e}")
+        logger.error(f"❌ Error in main: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise
 
 @dp.callback_query(F.data == "reset_model")
