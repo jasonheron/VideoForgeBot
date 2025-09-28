@@ -97,11 +97,29 @@ The bot requires these API keys to function:
 
 ✅ **MVP Implementation** - Core features implemented
 ✅ **Critical Fix Applied** - Persistent credit storage implemented (Dec 26, 2025)
+✅ **Admin System** - Full admin panel with credit management (Sept 28, 2025)
+✅ **Production Deploy Config** - VM deployment configured for always-on bot (Sept 28, 2025)
 ⚠️ **Image Upload Limitation** - Requires external storage setup
-⏳ **Waiting for API Keys** - Bot ready for testing once keys provided
-🔄 **Pending User Setup** - User needs to configure environment variables
+🚀 **Ready for Production** - Bot configured for Reserved VM deployment
 
-## Next Steps for User
+## Production Deployment Guide
+
+### 🚀 **Publishing to Always-On Production**
+
+**Important**: The bot works in development but stops when you close the chat because it's running in dev mode. For production:
+
+1. **Click "Publish" Button** in the top toolbar
+2. **Select "Reserved VM"** (not Autoscale) for always-on operation
+3. **Choose Background Worker** app type (bot doesn't need web interface)
+4. **Configure Resources**:
+   - Minimum: 0.25 vCPU, 1GB RAM (sufficient for bot)
+   - Upgrade if needed for high traffic
+5. **Environment Variables**: Copy all secrets from dev to production
+6. **Deploy**: Click "Publish" - bot will run 24/7
+
+**Why Reserved VM?**: Bots need persistent connections for Telegram webhooks. Autoscale deployments stop when inactive, breaking the bot.
+
+### 🔧 **Environment Setup**
 
 1. **Get Telegram Bot Token**:
    - Message @BotFather on Telegram
@@ -115,12 +133,7 @@ The bot requires these API keys to function:
    - Click "Tools" → "Secrets" in Replit
    - Add BOT_TOKEN and BRS_AI_API_KEY (or KIE_AI_API_KEY for legacy compatibility)
    - Generate a strong CALLBACK_SECRET (random 32+ char string)
-   - Set WEBHOOK_URL to your Replit's public URL
-   
-4. **Run the Bot**:
-   - Click "Run" button
-   - Bot uses polling to listen for Telegram messages
-   - No webhook setup required with @BotFather
+   - Set WEBHOOK_URL to your production URL (will be provided after publishing)
 
 ## Dependencies Installed
 
