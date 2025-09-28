@@ -2067,7 +2067,7 @@ async def cmd_give_credits(message: Message):
         
         # Give credits
         current_credits = get_credits(target_user_id)
-        set_credits(target_user_id, current_credits + amount)
+        add_credits(target_user_id, amount)
         
         # Determine account type
         account_type = "Group" if target_user_id < 0 else "User"
