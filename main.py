@@ -40,6 +40,9 @@ PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "your_payment_provi
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://your-repl-url.replit.dev")
 CALLBACK_SECRET = os.getenv("CALLBACK_SECRET", "your_callback_secret_key_here")  # New security key
 
+# Admin Configuration - Restricted Access
+ADMIN_USER_ID = 2146010529  # @niftysolsol only
+
 # Initialize Bot and Dispatcher
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
@@ -183,6 +186,10 @@ def track_message_for_cleanup(generation_id: str, message_id: int, chat_id: int,
     })
     save_message_cleanup()
     logger.info(f"Tracking message {message_id} for cleanup in generation {generation_id}")
+
+def is_admin(user_id: int) -> bool:
+    """Check if user is admin"""
+    return user_id == ADMIN_USER_ID
 
 async def cleanup_generation_messages(generation_id: str, keep_final_message_id: Optional[int] = None):
     """Delete all tracked messages for a generation except optionally one final message"""
@@ -1564,6 +1571,195 @@ async def help_contact_callback(callback: CallbackQuery):
         logger.error(f"Error in help_contact_callback: {e}")
         await callback.answer("❌ Error loading contact info.")
 
+# ===== ADMIN CALLBACKS (Restricted Access) =====
+@dp.callback_query(F.data == "admin_give_credits")
+async def admin_give_credits_callback(callback: CallbackQuery):
+    """Admin only - Give credits to users"""
+    if not callback.from_user or not is_admin(callback.from_user.id):
+        await callback.answer("❌ Access denied.", show_alert=True)
+        return
+    
+    try:
+        give_credits_text = (
+            "💳 **Give Free Credits**\n\n"
+            "📝 **Instructions:**\n"
+            "Send me a message in this format:\n\n"
+            "`/give_credits USER_ID AMOUNT`\n\n"
+            "📖 **Examples:**\n"
+            "• `/give_credits 1020468360 10` - Give 10 credits to user\n"
+            "• `/give_credits -123456789 50` - Give 50 credits to group\n\n"
+            "🔍 **Finding User IDs:**\n"
+            "• Use 'User Lookup' to search\n"
+            "• Check user stats for their ID\n"
+            "• Negative IDs = Groups\n"
+            "• Positive IDs = Users\n\n"
+            "⚠️ **Admin Only** - This action is logged."
+        )
+        
+        back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Admin Panel", callback_data="admin_back")]
+        ])
+        
+        await safe_edit_message(callback, give_credits_text, reply_markup=back_keyboard, parse_mode="Markdown")
+        await callback.answer()
+        
+    except Exception as e:
+        logger.error(f"Error in admin_give_credits_callback: {e}")
+        await callback.answer("❌ Admin error occurred.")
+
+@dp.callback_query(F.data == "admin_view_users")
+async def admin_view_users_callback(callback: CallbackQuery):
+    """Admin only - View all users with credits"""
+    if not callback.from_user or not is_admin(callback.from_user.id):
+        await callback.answer("❌ Access denied.", show_alert=True)
+        return
+    
+    try:
+        users_list = []
+        groups_list = []
+        
+        for account_id, credits in user_credits.items():
+            if account_id > 0:
+                users_list.append(f"👤 `{account_id}`: {credits} credits")
+            else:
+                groups_list.append(f"👥 `{account_id}`: {credits} credits")
+        
+        users_text = "📊 **All Accounts with Credits**\n\n"
+        
+        if users_list:
+            users_text += "👥 **Users:**\n" + "\n".join(users_list[:10])
+            if len(users_list) > 10:
+                users_text += f"\n... and {len(users_list) - 10} more users"
+        
+        if groups_list:
+            users_text += "\n\n🏢 **Groups:**\n" + "\n".join(groups_list[:5])
+            if len(groups_list) > 5:
+                users_text += f"\n... and {len(groups_list) - 5} more groups"
+        
+        if not users_list and not groups_list:
+            users_text += "No accounts found with credits."
+        
+        users_text += f"\n\n📈 **Total Accounts:** {len(user_credits)}"
+        
+        back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Admin Panel", callback_data="admin_back")]
+        ])
+        
+        await safe_edit_message(callback, users_text, reply_markup=back_keyboard, parse_mode="Markdown")
+        await callback.answer()
+        
+    except Exception as e:
+        logger.error(f"Error in admin_view_users_callback: {e}")
+        await callback.answer("❌ Admin error occurred.")
+
+@dp.callback_query(F.data == "admin_user_lookup")
+async def admin_user_lookup_callback(callback: CallbackQuery):
+    """Admin only - Lookup specific user"""
+    if not callback.from_user or not is_admin(callback.from_user.id):
+        await callback.answer("❌ Access denied.", show_alert=True)
+        return
+    
+    try:
+        lookup_text = (
+            "🔍 **User Lookup**\n\n"
+            "📝 **Instructions:**\n"
+            "Send me a message in this format:\n\n"
+            "`/lookup USER_ID`\n\n"
+            "📖 **Examples:**\n"
+            "• `/lookup 1020468360` - Check user's balance\n"
+            "• `/lookup -123456789` - Check group's balance\n\n"
+            "ℹ️ **This will show:**\n"
+            "• Current credit balance\n"
+            "• Account type (user/group)\n"
+            "• Last activity (if available)\n\n"
+            "⚠️ **Admin Only** - Lookup is logged."
+        )
+        
+        back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Admin Panel", callback_data="admin_back")]
+        ])
+        
+        await safe_edit_message(callback, lookup_text, reply_markup=back_keyboard, parse_mode="Markdown")
+        await callback.answer()
+        
+    except Exception as e:
+        logger.error(f"Error in admin_user_lookup_callback: {e}")
+        await callback.answer("❌ Admin error occurred.")
+
+@dp.callback_query(F.data == "admin_stats")
+async def admin_stats_callback(callback: CallbackQuery):
+    """Admin only - Show bot statistics"""
+    if not callback.from_user or not is_admin(callback.from_user.id):
+        await callback.answer("❌ Access denied.", show_alert=True)
+        return
+    
+    try:
+        total_users = sum(1 for uid in user_credits.keys() if uid > 0)
+        total_groups = sum(1 for uid in user_credits.keys() if uid < 0)
+        total_credits_issued = sum(user_credits.values())
+        active_generations = len(pending_generations)
+        
+        stats_text = (
+            "📈 **Bot Statistics**\n\n"
+            f"👥 **Users:** {total_users}\n"
+            f"🏢 **Groups:** {total_groups}\n"
+            f"💳 **Total Credits Issued:** {total_credits_issued}\n"
+            f"🎬 **Active Generations:** {active_generations}\n\n"
+            "📊 **Top Users by Credits:**\n"
+        )
+        
+        # Show top users by credits
+        sorted_users = sorted([(uid, credits) for uid, credits in user_credits.items() if uid > 0], 
+                            key=lambda x: x[1], reverse=True)[:5]
+        
+        for i, (uid, credits) in enumerate(sorted_users, 1):
+            stats_text += f"{i}. User `{uid}`: {credits} credits\n"
+        
+        back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Admin Panel", callback_data="admin_back")]
+        ])
+        
+        await safe_edit_message(callback, stats_text, reply_markup=back_keyboard, parse_mode="Markdown")
+        await callback.answer()
+        
+    except Exception as e:
+        logger.error(f"Error in admin_stats_callback: {e}")
+        await callback.answer("❌ Admin error occurred.")
+
+@dp.callback_query(F.data == "admin_back")
+async def admin_back_callback(callback: CallbackQuery):
+    """Admin only - Go back to admin panel"""
+    if not callback.from_user or not is_admin(callback.from_user.id):
+        await callback.answer("❌ Access denied.", show_alert=True)
+        return
+    
+    try:
+        # Recreate admin panel
+        admin_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Give Credits", callback_data="admin_give_credits")],
+            [InlineKeyboardButton(text="📊 View All Users", callback_data="admin_view_users")],
+            [InlineKeyboardButton(text="🔍 User Lookup", callback_data="admin_user_lookup")],
+            [InlineKeyboardButton(text="📈 Bot Stats", callback_data="admin_stats")]
+        ])
+        
+        admin_text = (
+            "🔧 **Admin Panel**\n\n"
+            f"👋 Welcome back, @niftysolsol!\n\n"
+            "🛠️ **Available Actions:**\n"
+            "• **Give Credits** - Add free credits to any user/group\n"
+            "• **View All Users** - See all accounts with credits\n"
+            "• **User Lookup** - Check specific user's balance\n"
+            "• **Bot Stats** - Overall usage statistics\n\n"
+            "🔒 **Admin Only** - This panel is invisible to regular users."
+        )
+        
+        await safe_edit_message(callback, admin_text, reply_markup=admin_keyboard, parse_mode="Markdown")
+        await callback.answer()
+        
+    except Exception as e:
+        logger.error(f"Error in admin_back_callback: {e}")
+        await callback.answer("❌ Admin error occurred.")
+
 @dp.message(GenerationStates.waiting_for_prompt)
 async def process_prompt(message: Message, state: FSMContext):
     """Handle text prompt input"""
@@ -1796,6 +1992,160 @@ async def process_image_or_skip(message: Message, state: FSMContext):
         await state.clear()
 
 # Add comprehensive help command
+@dp.message(Command("admin"))
+async def cmd_admin(message: Message):
+    """Handle /admin command - Admin only"""
+    if not message.from_user:
+        return
+        
+    user_id = message.from_user.id
+    
+    # Check if user is admin
+    if not is_admin(user_id):
+        # Don't reveal admin command exists to non-admins
+        return
+        
+    try:
+        # Admin panel with credit management
+        admin_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Give Credits", callback_data="admin_give_credits")],
+            [InlineKeyboardButton(text="📊 View All Users", callback_data="admin_view_users")],
+            [InlineKeyboardButton(text="🔍 User Lookup", callback_data="admin_user_lookup")],
+            [InlineKeyboardButton(text="📈 Bot Stats", callback_data="admin_stats")]
+        ])
+        
+        admin_text = (
+            "🔧 **Admin Panel**\n\n"
+            f"👋 Welcome back, @niftysolsol!\n\n"
+            "🛠️ **Available Actions:**\n"
+            "• **Give Credits** - Add free credits to any user/group\n"
+            "• **View All Users** - See all accounts with credits\n"
+            "• **User Lookup** - Check specific user's balance\n"
+            "• **Bot Stats** - Overall usage statistics\n\n"
+            "🔒 **Admin Only** - This panel is invisible to regular users."
+        )
+        
+        await message.answer(admin_text, reply_markup=admin_keyboard, parse_mode="Markdown")
+        
+    except Exception as e:
+        logger.error(f"Error in cmd_admin: {e}")
+        await message.answer("❌ Admin error occurred.")
+
+@dp.message(Command("give_credits"))
+async def cmd_give_credits(message: Message):
+    """Admin only - Give credits to users via command"""
+    if not message.from_user or not is_admin(message.from_user.id):
+        # Don't reveal command exists to non-admins
+        return
+    
+    try:
+        # Parse arguments
+        if not message.text or len(message.text.split()) != 3:
+            await message.answer(
+                "❌ **Invalid Format**\n\n"
+                "Use: `/give_credits USER_ID AMOUNT`\n\n"
+                "Examples:\n"
+                "• `/give_credits 1020468360 10`\n"
+                "• `/give_credits -123456789 50`",
+                parse_mode="Markdown"
+            )
+            return
+        
+        _, user_id_str, amount_str = message.text.split()
+        
+        # Validate inputs
+        try:
+            target_user_id = int(user_id_str)
+            amount = int(amount_str)
+        except ValueError:
+            await message.answer("❌ USER_ID and AMOUNT must be numbers")
+            return
+        
+        if amount <= 0 or amount > 1000:
+            await message.answer("❌ Amount must be between 1 and 1000")
+            return
+        
+        # Give credits
+        current_credits = get_credits(target_user_id)
+        set_credits(target_user_id, current_credits + amount)
+        
+        # Determine account type
+        account_type = "Group" if target_user_id < 0 else "User"
+        
+        # Log the admin action
+        logger.info(f"Admin {message.from_user.id} gave {amount} credits to {account_type.lower()} {target_user_id}")
+        
+        await message.answer(
+            f"✅ **Credits Added Successfully**\n\n"
+            f"🎯 **Target:** {account_type} `{target_user_id}`\n"
+            f"💳 **Added:** {amount} credits\n"
+            f"💰 **New Balance:** {current_credits + amount} credits\n\n"
+            f"📝 **Action logged** by admin @{message.from_user.username or 'niftysolsol'}",
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in cmd_give_credits: {e}")
+        await message.answer("❌ Error giving credits. Please try again.")
+
+@dp.message(Command("lookup"))
+async def cmd_lookup(message: Message):
+    """Admin only - Look up user credit balance"""
+    if not message.from_user or not is_admin(message.from_user.id):
+        # Don't reveal command exists to non-admins
+        return
+    
+    try:
+        # Parse arguments
+        if not message.text or len(message.text.split()) != 2:
+            await message.answer(
+                "❌ **Invalid Format**\n\n"
+                "Use: `/lookup USER_ID`\n\n"
+                "Examples:\n"
+                "• `/lookup 1020468360`\n"
+                "• `/lookup -123456789`",
+                parse_mode="Markdown"
+            )
+            return
+        
+        _, user_id_str = message.text.split()
+        
+        # Validate input
+        try:
+            target_user_id = int(user_id_str)
+        except ValueError:
+            await message.answer("❌ USER_ID must be a number")
+            return
+        
+        # Look up account
+        credits = get_credits(target_user_id)
+        account_type = "Group" if target_user_id < 0 else "User"
+        has_account = target_user_id in user_credits
+        
+        # Check if user has selected a model (users only)
+        selected_model = None
+        if target_user_id > 0 and target_user_id in user_models:
+            selected_model = AVAILABLE_MODELS[user_models[target_user_id]]
+        
+        # Log the admin lookup
+        logger.info(f"Admin {message.from_user.id} looked up {account_type.lower()} {target_user_id}")
+        
+        lookup_text = f"🔍 **Account Lookup**\n\n"
+        lookup_text += f"🎯 **Target:** {account_type} `{target_user_id}`\n"
+        lookup_text += f"💳 **Credits:** {credits}\n"
+        lookup_text += f"📊 **Account Status:** {'Active' if has_account else 'New (no credits yet)'}\n"
+        
+        if selected_model:
+            lookup_text += f"🤖 **Selected Model:** {selected_model}\n"
+        
+        lookup_text += f"\n📝 **Lookup by:** @{message.from_user.username or 'niftysolsol'}"
+        
+        await message.answer(lookup_text, parse_mode="Markdown")
+        
+    except Exception as e:
+        logger.error(f"Error in cmd_lookup: {e}")
+        await message.answer("❌ Error looking up account. Please try again.")
+
 @dp.message(Command("help"))
 async def cmd_help(message: Message):
     """Handle /help command with comprehensive help menu"""
