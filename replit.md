@@ -5,9 +5,9 @@ A sophisticated Telegram bot that generates AI videos using the KIE.ai API with 
 ## Overview
 
 This bot allows users to:
-- Generate AI videos using advanced models (Veo 3 Fast, Kling v2.1)
+- Generate AI videos using 7 advanced AI models (Veo 3, Runway Gen-3, Wan 2.2, Kling 2.1, Sora 2)
 - Purchase credits using Telegram Stars (XTR)
-- Upload optional images for video generation
+- Upload optional images for video generation (text-only models like Sora 2 T2V skip this step)
 - Receive generated videos directly in Telegram
 
 ## Features Implemented
@@ -24,9 +24,11 @@ This bot allows users to:
 - Secure payment processing
 
 ### ✅ Video Generation
-- Model selection via inline keyboard (Veo 3 Fast, Kling v2.1)
+- **7 AI Models Available**: Veo 3 Fast, Runway Gen-3, Wan 2.2 (T2V/I2V), Kling 2.1 (Standard/Pro/Master), Sora 2 (T2V/I2V)
+- Model selection via inline keyboard with descriptive names
 - Text prompt input with validation
-- Optional image upload support
+- Smart image upload - automatically skipped for text-only models (Sora 2 T2V, Wan 2.2 T2V)
+- Optional image upload for image-to-video models
 - Integration with KIE.ai API
 
 ### ✅ Architecture
@@ -99,8 +101,9 @@ The bot requires these API keys to function:
 ✅ **Critical Fix Applied** - Persistent credit storage implemented (Dec 26, 2025)
 ✅ **Admin System** - Full admin panel with credit management (Sept 28, 2025)
 ✅ **Production Deploy Config** - VM deployment configured for always-on bot (Sept 28, 2025)
+✅ **Sora 2 Models Added** - Both text-to-video and image-to-video variants integrated (Oct 6, 2025)
 ⚠️ **Image Upload Limitation** - Requires external storage setup
-🚀 **Ready for Production** - Bot configured for Reserved VM deployment
+🚀 **Ready for Production** - Bot configured for Reserved VM deployment with 7 AI models
 
 ## Production Deployment Guide
 
@@ -158,7 +161,13 @@ The bot requires these API keys to function:
 - **Image Uploads**: Current implementation downloads images but may need external storage for KIE.ai to access them
 - **Testing**: Bot is ready for testing once proper environment variables are set
 
-## Recent Fixes
+## Recent Updates
+
+### 🎬 Sora 2 Models Integration (Oct 6, 2025)
+- **Added**: Sora 2 Text-to-Video and Image-to-Video models
+- **Feature**: Text-only models automatically skip image upload step
+- **Implementation**: Full API integration with KIE.ai's Sora 2 endpoints
+- **Result**: Bot now supports 7 AI models total
 
 ### 🔧 Credit Storage Fix (Dec 26, 2025)
 - **Issue**: Credits were lost on bot restart due to in-memory storage
