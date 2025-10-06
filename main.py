@@ -242,11 +242,13 @@ AVAILABLE_MODELS = {
     "runway_gen3": "🚀 Runway Gen-3 - Advanced video generation",
     "wan_2_2_t2v": "📝 Wan 2.2 - Text to video",
     "wan_2_2_i2v": "🖼️ Wan 2.2 - Image to video",
-    "kling_standard": "💰 Kling 2.1 - Image to video (720p)"
+    "kling_standard": "💰 Kling 2.1 - Image to video (720p)",
+    "sora_2_t2v": "✨ Sora 2 - Text to video",
+    "sora_2_i2v": "🎬 Sora 2 - Image to video"
 }
 
 # Models that skip image upload (text-to-video only)
-TEXT_ONLY_MODELS = {"wan_2_2_t2v"}
+TEXT_ONLY_MODELS = {"wan_2_2_t2v", "sora_2_t2v"}
 
 # FSM States
 class GenerationStates(StatesGroup):
@@ -525,6 +527,38 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
             "callBackUrl": f"{WEBHOOK_URL.rstrip('/')}/brs_callback",
             "input": input_data
         }
+        
+    elif model.startswith("sora_2"):
+        api_url = "https://api.kie.ai/api/v1/jobs/createTask"
+        
+        # Determine the specific Sora 2 model variant
+        if model == "sora_2_t2v":
+            model_name = "sora-2-text-to-video"
+            input_data = {
+                "prompt": prompt,
+                "aspect_ratio": "landscape",
+                "quality": "standard"
+            }
+        elif model == "sora_2_i2v":
+            model_name = "sora-2-image-to-video"
+            input_data = {
+                "prompt": prompt,
+                "aspect_ratio": "landscape",
+                "quality": "standard"
+            }
+            # Add image URLs array (Sora 2 uses plural "image_urls" as array)
+            if image_path:
+                image_url = f"{WEBHOOK_URL}/images/{os.path.basename(image_path)}"
+                input_data["image_urls"] = [image_url]
+                logger.info(f"Added image URLs for Sora 2 I2V: {[image_url]}")
+        else:
+            raise Exception(f"Unknown Sora 2 variant: {model}")
+            
+        data = {
+            "model": model_name,
+            "callBackUrl": f"{WEBHOOK_URL.rstrip('/')}/brs_callback",
+            "input": input_data
+        }
     else:
         raise Exception(f"Unsupported model: {model}")
     
@@ -573,7 +607,7 @@ async def cmd_start(message: Message):
 • Need credits? Try /buy for great packages
 • Get help anytime with /help
 
-🎯 **Available Models:** 5 AI models including Veo 3, Runway Gen-3, Wan 2.2, and Kling 2.1
+🎯 **Available Models:** 7 AI models including Veo 3, Runway Gen-3, Sora 2, and Kling 2.1
 
 💰 **Pricing:** 1 credit per video, bulk discounts available
 
@@ -1500,7 +1534,7 @@ async def back_to_start_callback(callback: CallbackQuery):
 • Need credits? Try /buy for great packages
 • Get help anytime with /help
 
-🎯 **Available Models:** 5 AI models including Veo 3, Runway Gen-3, Wan 2.2, and Kling 2.1
+🎯 **Available Models:** 7 AI models including Veo 3, Runway Gen-3, Sora 2, and Kling 2.1
 
 💰 **Pricing:** 1 credit per video, bulk discounts available
 
@@ -1963,7 +1997,7 @@ async def process_image_or_skip(message: Message, state: FSMContext):
         
         # Validate image requirements BEFORE deducting credits or calling API
         # Check if this is an image-to-video model that requires an image
-        image_required_models = ["wan_2_2_i2v", "kling_master_i2v", "runway_gen3"]
+        image_required_models = ["wan_2_2_i2v", "kling_master_i2v", "runway_gen3", "sora_2_i2v"]
         if model in image_required_models and not image_path:
             account_id = get_credit_account_id(message)
             add_credits(account_id, 1)  # Refund the credit
