@@ -242,8 +242,13 @@ AVAILABLE_MODELS = {
     "runway_gen3": "🚀 Runway Gen-3 - Advanced video generation",
     "wan_2_2_t2v": "📝 Wan 2.2 - Text to video",
     "wan_2_2_i2v": "🖼️ Wan 2.2 - Image to video",
-    "kling_standard": "💰 Kling 2.1 - Image to video (720p)"
+    "kling_standard": "💰 Kling 2.1 - Image to video (720p)",
+    "sora_2_t2v": "✨ Sora 2 - Text to video",
+    "sora_2_i2v": "🎬 Sora 2 - Image to video"
 }
+
+# Models that skip image upload (text-to-video only)
+TEXT_ONLY_MODELS = {"wan_2_2_t2v", "sora_2_t2v"}
 
 # FSM States
 class GenerationStates(StatesGroup):
@@ -1770,9 +1775,9 @@ async def process_prompt(message: Message, state: FSMContext):
             
         prompt = message.text
         is_group = is_group_chat(message)
+        user_id = message.from_user.id if message.from_user else 0
         
         # Generate a unique generation ID for tracking
-        user_id = message.from_user.id if message.from_user else 0
         generation_id = f"gen_{int(time.time() * 1000)}_{user_id}"
         
         # Store prompt and generation info in state
@@ -1782,7 +1787,91 @@ async def process_prompt(message: Message, state: FSMContext):
         if is_group:
             track_message_for_cleanup(generation_id, message.message_id, message.chat.id, "user")
         
-        # Enhanced image prompt with skip keyboard  
+        # Check if model is text-only (skip image upload)
+        model = user_models.get(user_id, "veo3_fast")
+        
+        if model in TEXT_ONLY_MODELS:
+            # Text-only model - skip image upload and generate directly
+            account_id = get_credit_account_id(message)
+            
+            # Deduct credits
+            if not deduct_credits(account_id, 1):
+                await message.answer("❌ Insufficient credits!")
+                await state.clear()
+                return
+            
+            # Send to BRS AI API with enhanced progress tracking
+            try:
+                # Show generating message
+                model_name = AVAILABLE_MODELS.get(model, "Unknown Model")
+                generating_msg = await message.answer(
+                    f"🎬 **Generating video...**\n\n"
+                    f"🤖 **Model:** {model_name}\n"
+                    f"📝 **Prompt:** {prompt[:100]}{'...' if len(prompt) > 100 else ''}\n\n"
+                    f"⏳ This may take 1-3 minutes...",
+                    parse_mode="Markdown"
+                )
+                
+                # Track generating message for cleanup in groups
+                if is_group:
+                    track_message_for_cleanup(generation_id, generating_msg.message_id, message.chat.id, "bot")
+                
+                # Prepare generation request
+                callback_url = f"{WEBHOOK_URL.rstrip('/')}/brs_callback"
+                
+                # Store generation info for callback
+                pending_generations[generation_id] = {
+                    "user_id": user_id,
+                    "chat_id": message.chat.id,
+                    "account_id": account_id,
+                    "model": model,
+                    "prompt": prompt,
+                    "image_url": None,
+                    "timestamp": time.time()
+                }
+                save_pending_generations()
+                
+                # Make API call
+                async with http_session.post(
+                    "https://api.kie.ai/v1/video/generations",
+                    headers={
+                        "Authorization": f"Bearer {BRS_AI_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": model,
+                        "prompt": prompt,
+                        "callback_url": callback_url,
+                        "metadata": {"generation_id": generation_id}
+                    },
+                    timeout=30
+                ) as resp:
+                    if resp.status == 200:
+                        result = await resp.json()
+                        task_id = result.get("id") or result.get("task_id")
+                        
+                        if task_id:
+                            # Update with task ID
+                            pending_generations[generation_id]["task_id"] = task_id
+                            save_pending_generations()
+                            
+                            logger.info(f"Video generation started for user {user_id}, task_id: {task_id}")
+                        else:
+                            logger.warning(f"No task_id in response: {result}")
+                    else:
+                        error_text = await resp.text()
+                        raise Exception(f"API error {resp.status}: {error_text}")
+                        
+            except Exception as e:
+                # Refund credits on error
+                add_credits(account_id, 1)
+                await message.answer(f"❌ Error starting generation: {str(e)}\nCredits refunded.")
+                logger.error(f"Generation error for user {user_id}: {e}")
+            
+            await state.clear()
+            return
+        
+        # Image-to-video model - show image upload prompt
         skip_keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⏭️ Skip Image", callback_data="skip_image")],
             [InlineKeyboardButton(text="❓ Image Tips", callback_data="help_image")]
