@@ -531,6 +531,8 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
     elif model.startswith("sora_2"):
         api_url = "https://api.kie.ai/api/v1/jobs/createTask"
         
+        logger.info(f"Processing Sora 2 request: model={model}, image_path={image_path}")
+        
         # Determine the specific Sora 2 model variant
         if model == "sora_2_t2v":
             model_name = "sora-2-text-to-video"
@@ -539,6 +541,7 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
                 "aspect_ratio": "landscape",
                 "quality": "standard"
             }
+            logger.info(f"Sora 2 T2V request (no image expected): {input_data}")
         elif model == "sora_2_i2v":
             model_name = "sora-2-image-to-video"
             input_data = {
@@ -552,6 +555,9 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
                 image_url = f"{WEBHOOK_URL}/images/{os.path.basename(image_path)}"
                 input_data["image_url"] = image_url
                 logger.info(f"Added image URL for Sora 2 I2V: {image_url}")
+            else:
+                logger.error(f"Sora 2 I2V requires image but image_path is None!")
+                raise Exception("image_url is required for Sora 2 Image-to-Video")
         else:
             raise Exception(f"Unknown Sora 2 variant: {model}")
             
@@ -2023,6 +2029,7 @@ async def process_image_or_skip(message: Message, state: FSMContext):
                 parse_mode="Markdown"
             )
             
+            logger.info(f"Calling send_to_brs_api with model={model}, image_path={image_path}")
             task_id = await send_to_brs_api(prompt, model, image_path)
             
             # Migrate message cleanup records from temporary generation_id to actual task_id
