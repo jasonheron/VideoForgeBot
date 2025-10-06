@@ -5,9 +5,9 @@ A sophisticated Telegram bot that generates AI videos using the KIE.ai API with 
 ## Overview
 
 This bot allows users to:
-- Generate AI videos using 7 advanced AI models (Veo 3, Runway Gen-3, Wan 2.2, Kling 2.1, Sora 2)
+- Generate AI videos using 5 advanced AI models (Veo 3, Runway Gen-3, Wan 2.2, Kling 2.1)
 - Purchase credits using Telegram Stars (XTR)
-- Upload optional images for video generation (text-only models like Sora 2 T2V skip this step)
+- Upload optional images for video generation (text-only models like Wan 2.2 T2V skip this step)
 - Receive generated videos directly in Telegram
 
 ## Features Implemented
@@ -24,10 +24,10 @@ This bot allows users to:
 - Secure payment processing
 
 ### ✅ Video Generation
-- **7 AI Models Available**: Veo 3 Fast, Runway Gen-3, Wan 2.2 (T2V/I2V), Kling 2.1 (Standard/Pro/Master), Sora 2 (T2V/I2V)
+- **5 AI Models Available**: Veo 3 Fast, Runway Gen-3, Wan 2.2 (T2V/I2V), Kling 2.1 (Standard)
 - Model selection via inline keyboard with descriptive names
 - Text prompt input with validation
-- Smart image upload - automatically skipped for text-only models (Sora 2 T2V, Wan 2.2 T2V)
+- Smart image upload - automatically skipped for text-only models (Wan 2.2 T2V)
 - Optional image upload for image-to-video models
 - Integration with KIE.ai API
 
@@ -101,9 +101,8 @@ The bot requires these API keys to function:
 ✅ **Critical Fix Applied** - Persistent credit storage implemented (Dec 26, 2025)
 ✅ **Admin System** - Full admin panel with credit management (Sept 28, 2025)
 ✅ **Production Deploy Config** - VM deployment configured for always-on bot (Sept 28, 2025)
-✅ **Sora 2 Models Added** - Both text-to-video and image-to-video variants integrated (Oct 6, 2025)
 ⚠️ **Image Upload Limitation** - Requires external storage setup
-🚀 **Ready for Production** - Bot configured for Reserved VM deployment with 7 AI models
+🚀 **Ready for Production** - Bot configured for Reserved VM deployment with 5 AI models
 
 ## Production Deployment Guide
 
@@ -163,11 +162,10 @@ The bot requires these API keys to function:
 
 ## Recent Updates
 
-### 🎬 Sora 2 Models Integration (Oct 6, 2025)
-- **Added**: Sora 2 Text-to-Video and Image-to-Video models
-- **Feature**: Text-only models automatically skip image upload step
-- **Implementation**: Full API integration with KIE.ai's Sora 2 endpoints
-- **Result**: Bot now supports 7 AI models total
+### ⚠️ Sora 2 Removal (Oct 6, 2025)
+- **Removed**: Sora 2 models - not actually available on KIE.ai API yet
+- **Reason**: KIE.ai documentation doesn't list Sora 2 as available
+- **Current**: Bot supports 5 working AI models (Veo 3, Runway Gen-3, Wan 2.2, Kling 2.1)
 
 ### 🔧 Credit Storage Fix (Dec 26, 2025)
 - **Issue**: Credits were lost on bot restart due to in-memory storage
