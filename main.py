@@ -533,18 +533,18 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
         
         # Determine the specific Sora 2 model variant
         if model == "sora_2_t2v":
-            model_name = "sora/2-text-to-video"
+            model_name = "sora-2-text-to-video"
             input_data = {
                 "prompt": prompt,
-                "aspect_ratio": "16:9",
-                "duration": "5"
+                "aspect_ratio": "landscape",
+                "quality": "standard"
             }
         elif model == "sora_2_i2v":
-            model_name = "sora/2-image-to-video"
+            model_name = "sora-2-image-to-video"
             input_data = {
                 "prompt": prompt,
-                "aspect_ratio": "16:9",
-                "duration": "5"
+                "aspect_ratio": "landscape",
+                "quality": "standard"
             }
             # Add image URL if provided
             if image_path:
