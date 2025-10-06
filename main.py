@@ -1862,8 +1862,11 @@ async def process_prompt(message: Message, state: FSMContext):
                 # Prepare generation request
                 callback_url = f"{WEBHOOK_URL.rstrip('/')}/brs_callback"
                 
+                # Use proper API call function
+                task_id = await send_to_brs_api(prompt, model, None)
+                
                 # Store generation info for callback
-                pending_generations[generation_id] = {
+                pending_generations[task_id] = {
                     "user_id": user_id,
                     "chat_id": message.chat.id,
                     "account_id": account_id,
@@ -1874,36 +1877,7 @@ async def process_prompt(message: Message, state: FSMContext):
                 }
                 save_pending_generations()
                 
-                # Make API call
-                async with http_session.post(
-                    "https://api.kie.ai/v1/video/generations",
-                    headers={
-                        "Authorization": f"Bearer {BRS_AI_API_KEY}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": model,
-                        "prompt": prompt,
-                        "callback_url": callback_url,
-                        "metadata": {"generation_id": generation_id}
-                    },
-                    timeout=30
-                ) as resp:
-                    if resp.status == 200:
-                        result = await resp.json()
-                        task_id = result.get("id") or result.get("task_id")
-                        
-                        if task_id:
-                            # Update with task ID
-                            pending_generations[generation_id]["task_id"] = task_id
-                            save_pending_generations()
-                            
-                            logger.info(f"Video generation started for user {user_id}, task_id: {task_id}")
-                        else:
-                            logger.warning(f"No task_id in response: {result}")
-                    else:
-                        error_text = await resp.text()
-                        raise Exception(f"API error {resp.status}: {error_text}")
+                logger.info(f"Video generation started for user {user_id}, task_id: {task_id}")
                         
             except Exception as e:
                 # Refund credits on error
