@@ -566,18 +566,29 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
         global http_session
         if not http_session:
             http_session = ClientSession()
+        
+        # Log the full request details for debugging
+        logger.info(f"=== API REQUEST ===")
+        logger.info(f"URL: {api_url}")
+        logger.info(f"Model: {model}")
+        logger.info(f"Headers: {headers}")
+        logger.info(f"Payload: {data}")
+        logger.info(f"==================")
             
         async with http_session.post(api_url, headers=headers, json=data) as response:
+            logger.info(f"API Response Status: {response.status}")
+            response_text = await response.text()
+            logger.info(f"API Response Body: {response_text}")
+            
             if response.status == 200:
-                result = await response.json()
+                result = await response.json() if response_text else {}
                 # BRS AI returns format: {"code": 200, "msg": "success", "data": {"taskId": "..."}}
                 if result.get("code") == 200 and "data" in result:
                     return result["data"].get("taskId", "unknown")
                 else:
                     raise Exception(f"BRS Error: {result.get('msg', 'Unknown error')}")
             else:
-                error_text = await response.text()
-                raise Exception(f"BRS Error: HTTP {response.status} - {error_text}")
+                raise Exception(f"API error {response.status}: {response_text}")
                 
     except Exception as e:
         logger.error(f"Error sending to BRS API: {e}")
