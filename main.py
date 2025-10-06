@@ -527,6 +527,39 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
             "callBackUrl": f"{WEBHOOK_URL.rstrip('/')}/brs_callback",
             "input": input_data
         }
+        
+    elif model.startswith("sora_2"):
+        api_url = "https://api.kie.ai/api/v1/jobs/createTask"
+        
+        # Determine the specific Sora 2 model variant
+        if model == "sora_2_t2v":
+            model_name = "sora/2-text-to-video"
+            input_data = {
+                "prompt": prompt,
+                "aspect_ratio": "16:9",
+                "duration": "5"
+            }
+        elif model == "sora_2_i2v":
+            model_name = "sora/2-image-to-video"
+            input_data = {
+                "prompt": prompt,
+                "aspect_ratio": "16:9",
+                "duration": "5"
+            }
+            # Add image URL if provided
+            if image_path:
+                # Serve image through our web server
+                image_url = f"{WEBHOOK_URL}/images/{os.path.basename(image_path)}"
+                input_data["image_url"] = image_url
+                logger.info(f"Added image URL for Sora 2 I2V: {image_url}")
+        else:
+            raise Exception(f"Unknown Sora 2 variant: {model}")
+            
+        data = {
+            "model": model_name,
+            "callBackUrl": f"{WEBHOOK_URL.rstrip('/')}/brs_callback",
+            "input": input_data
+        }
     else:
         raise Exception(f"Unsupported model: {model}")
     
@@ -575,7 +608,7 @@ async def cmd_start(message: Message):
 • Need credits? Try /buy for great packages
 • Get help anytime with /help
 
-🎯 **Available Models:** 5 AI models including Veo 3, Runway Gen-3, and Kling 2.1
+🎯 **Available Models:** 7 AI models including Veo 3, Runway Gen-3, Sora 2, and Kling 2.1
 
 💰 **Pricing:** 1 credit per video, bulk discounts available
 
@@ -1502,7 +1535,7 @@ async def back_to_start_callback(callback: CallbackQuery):
 • Need credits? Try /buy for great packages
 • Get help anytime with /help
 
-🎯 **Available Models:** 5 AI models including Veo 3, Runway Gen-3, and Kling 2.1
+🎯 **Available Models:** 7 AI models including Veo 3, Runway Gen-3, Sora 2, and Kling 2.1
 
 💰 **Pricing:** 1 credit per video, bulk discounts available
 
