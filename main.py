@@ -549,15 +549,15 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
                 "aspect_ratio": "landscape",
                 "quality": "standard"
             }
-            # Add image URL if provided
+            # Add image URLs array if provided (Sora 2 uses plural "image_urls" as array)
             if image_path:
                 # Serve image through our web server
                 image_url = f"{WEBHOOK_URL}/images/{os.path.basename(image_path)}"
-                input_data["image_url"] = image_url
-                logger.info(f"Added image URL for Sora 2 I2V: {image_url}")
+                input_data["image_urls"] = [image_url]  # Array format, not singular
+                logger.info(f"Added image URLs for Sora 2 I2V: {[image_url]}")
             else:
                 logger.error(f"Sora 2 I2V requires image but image_path is None!")
-                raise Exception("image_url is required for Sora 2 Image-to-Video")
+                raise Exception("image_urls is required for Sora 2 Image-to-Video")
         else:
             raise Exception(f"Unknown Sora 2 variant: {model}")
             
