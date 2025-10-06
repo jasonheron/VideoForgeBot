@@ -2002,6 +2002,26 @@ async def process_image_or_skip(message: Message, state: FSMContext):
             await state.clear()
             return
         
+        # Validate image requirements BEFORE deducting credits or calling API
+        # Check if this is an image-to-video model that requires an image
+        image_required_models = ["sora_2_i2v", "wan_2_2_i2v", "kling_master_i2v", "runway_gen3"]
+        if model in image_required_models and not image_path:
+            account_id = get_credit_account_id(message)
+            add_credits(account_id, 1)  # Refund the credit
+            await message.answer(
+                f"❌ **Image Required**\n\n"
+                f"The model '{AVAILABLE_MODELS.get(model, model)}' requires an image, "
+                f"but the image failed to upload or process.\n\n"
+                f"**Please try again:**\n"
+                f"1. Make sure you upload a valid image (JPG, PNG)\n"
+                f"2. Check your internet connection\n"
+                f"3. Try uploading a smaller image if it's very large\n\n"
+                f"💳 **Credit refunded.**",
+                parse_mode="Markdown"
+            )
+            await state.clear()
+            return
+        
         # Send to BRS AI API with enhanced progress tracking  
         try:
             # Get generation ID from state
