@@ -239,9 +239,12 @@ logger.info(f"Loaded {len(message_cleanup)} message cleanup records from storage
 # Simplified available models - streamlined selection
 AVAILABLE_MODELS = {
     "veo3_fast": "⚡ Veo 3 Fast - Quick generation with images", 
+    "veo3_1_fast": "🚀 Veo 3.1 Fast - Latest fast generation",
     "runway_gen3": "🚀 Runway Gen-3 - Advanced video generation",
     "wan_2_2_t2v": "📝 Wan 2.2 - Text to video",
     "wan_2_2_i2v": "🖼️ Wan 2.2 - Image to video",
+    "wan_2_5": "🌟 Wan 2.5 - Enhanced image to video",
+    "hailuo": "🎭 Hailuo 2.3 Pro - Professional animation",
     "kling_standard": "💰 Kling 2.1 - Image to video (720p)",
     "sora_2_t2v": "✨ Sora 2 - Text to video",
     "sora_2_i2v": "🎬 Sora 2 - Image to video"
@@ -418,7 +421,27 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
     }
     
     # Different endpoints and parameters for different models
-    if model.startswith("veo3"):
+    if model == "veo3_1_fast":
+        api_url = "https://api.kie.ai/api/v1/veo/generate"
+        data = {
+            "prompt": prompt,
+            "model": "veo3_fast",
+            "aspectRatio": "16:9",
+            "enableFallback": False,
+            "enableTranslation": True,
+            "callBackUrl": f"{WEBHOOK_URL.rstrip('/')}/brs_callback"
+        }
+        # Add image URLs for Veo 3.1 if provided
+        if image_path:
+            # Serve image through our web server
+            image_url = f"{WEBHOOK_URL}/images/{os.path.basename(image_path)}"
+            data["imageUrls"] = [image_url]
+            data["generationType"] = "FIRST_AND_LAST_FRAMES_2_VIDEO"
+            logger.info(f"Added image URL for Veo 3.1 Fast: {image_url}")
+        else:
+            data["generationType"] = "TEXT_2_VIDEO"
+            
+    elif model.startswith("veo3"):
         api_url = "https://api.kie.ai/api/v1/veo/generate"
         data = {
             "prompt": prompt,
@@ -453,6 +476,32 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
             data["imageUrl"] = image_url
             logger.info(f"Added image URL for Runway: {image_url}")
             
+    elif model == "wan_2_5":
+        api_url = "https://api.kie.ai/api/v1/jobs/createTask"
+        model_name = "wan/2-5-image-to-video"
+        
+        input_data = {
+            "prompt": prompt,
+            "duration": "5",
+            "resolution": "1080p",
+            "enable_prompt_expansion": True
+        }
+        
+        # Image is required for Wan 2.5
+        if image_path:
+            # Serve image through our web server
+            image_url = f"{WEBHOOK_URL}/images/{os.path.basename(image_path)}"
+            input_data["image_url"] = image_url
+            logger.info(f"Added image URL for Wan 2.5: {image_url}")
+        else:
+            raise Exception("Wan 2.5 requires an image")
+            
+        data = {
+            "model": model_name,
+            "callBackUrl": f"{WEBHOOK_URL.rstrip('/')}/brs_callback",
+            "input": input_data
+        }
+        
     elif model.startswith("wan_2_2"):
         api_url = "https://api.kie.ai/api/v1/jobs/createTask"
         
@@ -483,6 +532,31 @@ async def send_to_brs_api(prompt: str, model: str, image_path: Optional[str] = N
                 logger.info(f"Added image URL for Wan 2.2 I2V: {image_url}")
         else:
             raise Exception(f"Unknown Wan 2.2 variant: {model}")
+            
+        data = {
+            "model": model_name,
+            "callBackUrl": f"{WEBHOOK_URL.rstrip('/')}/brs_callback",
+            "input": input_data
+        }
+        
+    elif model == "hailuo":
+        api_url = "https://api.kie.ai/api/v1/jobs/createTask"
+        model_name = "hailuo/2-3-image-to-video-pro"
+        
+        input_data = {
+            "prompt": prompt,
+            "duration": "6",
+            "resolution": "768P"
+        }
+        
+        # Image is required for Hailuo
+        if image_path:
+            # Serve image through our web server
+            image_url = f"{WEBHOOK_URL}/images/{os.path.basename(image_path)}"
+            input_data["image_url"] = image_url
+            logger.info(f"Added image URL for Hailuo: {image_url}")
+        else:
+            raise Exception("Hailuo requires an image")
             
         data = {
             "model": model_name,
@@ -780,7 +854,7 @@ async def cmd_generate(message: Message, state: FSMContext):
         model_name = AVAILABLE_MODELS[selected_model]
         
         # Check if model supports image-to-video
-        image_models = ["wan_2_2_i2v", "kling_standard", "kling_pro", "kling_master_i2v", "veo3_fast", "runway_gen3"]
+        image_models = ["wan_2_2_i2v", "wan_2_5", "hailuo", "kling_standard", "kling_pro", "kling_master_i2v", "veo3_fast", "veo3_1_fast", "runway_gen3"]
         supports_images = selected_model in image_models
         
         prompt_hint = " - you can add an image in step 2" if supports_images else ""
@@ -913,7 +987,7 @@ async def quick_generate_callback(callback: CallbackQuery, state: FSMContext):
         model_name = AVAILABLE_MODELS[selected_model]
         
         # Check if model supports image-to-video
-        image_models = ["wan_2_2_i2v", "kling_standard", "kling_pro", "kling_master_i2v", "veo3_fast", "runway_gen3"]
+        image_models = ["wan_2_2_i2v", "wan_2_5", "hailuo", "kling_standard", "kling_pro", "kling_master_i2v", "veo3_fast", "veo3_1_fast", "runway_gen3"]
         supports_images = selected_model in image_models
         
         prompt_hint = " - you can add an image in step 2" if supports_images else ""
@@ -1080,6 +1154,15 @@ async def skip_image_callback(callback: CallbackQuery, state: FSMContext):
         return
         
     try:
+        # Check if model requires image (shouldn't be able to skip)
+        user_id = callback.from_user.id
+        model = user_models.get(user_id)
+        image_required_models = ["wan_2_2_i2v", "wan_2_5", "hailuo", "kling_master_i2v", "runway_gen3", "sora_2_i2v"]
+        
+        if model in image_required_models:
+            await callback.answer("❌ This model requires an image. Please upload one.", show_alert=True)
+            return
+        
         # Simulate typing 'skip'
         data = await state.get_data()
         if data.get('prompt'):
@@ -1889,27 +1972,49 @@ async def process_prompt(message: Message, state: FSMContext):
             return
         
         # Image-to-video model - show image upload prompt
-        skip_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⏭️ Skip Image", callback_data="skip_image")],
-            [InlineKeyboardButton(text="❓ Image Tips", callback_data="help_image")]
-        ])
+        # Check if image is required (can't skip)
+        image_required_models = ["wan_2_2_i2v", "wan_2_5", "hailuo", "kling_master_i2v", "runway_gen3", "sora_2_i2v"]
+        image_required = model in image_required_models
+        
+        # Create keyboard - only show skip button if image is not required
+        keyboard_buttons = []
+        if not image_required:
+            keyboard_buttons.append([InlineKeyboardButton(text="⏭️ Skip Image", callback_data="skip_image")])
+        keyboard_buttons.append([InlineKeyboardButton(text="❓ Image Tips", callback_data="help_image")])
+        skip_keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
         
         # Different UI for groups vs private chats
         if is_group:
             # Simplified message for groups
+            if image_required:
+                message_text = "📸 **Upload image (required)**"
+            else:
+                message_text = "📸 **Upload image or type 'skip'**"
             response_msg = await message.answer(
-                "📸 **Upload image or type 'skip'**",
+                message_text,
                 reply_markup=skip_keyboard,
                 parse_mode="Markdown"
             )
         else:
             # Full detailed message for private chats
+            if image_required:
+                message_text = (
+                    "🖼️ **Step 2:** Upload an image (required)\n\n"
+                    "📸 **Supported formats:** JPG, PNG, WebP, GIF\n"
+                    "📏 **Best quality:** High resolution (1024x1024+)\n\n"
+                    "⚠️ **This model requires an image** to generate video.\n\n"
+                    "📤 **Upload your image now:**"
+                )
+            else:
+                message_text = (
+                    "🖼️ **Step 2:** Upload an image (optional)\n\n"
+                    "📸 **Supported formats:** JPG, PNG, WebP, GIF\n"
+                    "📏 **Best quality:** High resolution (1024x1024+)\n\n"
+                    "💡 **Pro tip:** Images work great with I2V models!\n\n"
+                    "📤 **Upload your image now** or tap Skip to continue:"
+                )
             response_msg = await message.answer(
-                "🖼️ **Step 2:** Upload an image (optional)\n\n"
-                "📸 **Supported formats:** JPG, PNG, WebP, GIF\n"
-                "📏 **Best quality:** High resolution (1024x1024+)\n\n"
-                "💡 **Pro tip:** Images work great with I2V models!\n\n"
-                "📤 **Upload your image now** or tap Skip to continue:",
+                message_text,
                 reply_markup=skip_keyboard,
                 parse_mode="Markdown"
             )
@@ -1982,7 +2087,7 @@ async def process_image_or_skip(message: Message, state: FSMContext):
         
         # Validate image requirements BEFORE deducting credits or calling API
         # Check if this is an image-to-video model that requires an image
-        image_required_models = ["wan_2_2_i2v", "kling_master_i2v", "runway_gen3", "sora_2_i2v"]
+        image_required_models = ["wan_2_2_i2v", "wan_2_5", "hailuo", "kling_master_i2v", "runway_gen3", "sora_2_i2v"]
         if model in image_required_models and not image_path:
             account_id = get_credit_account_id(message)
             add_credits(account_id, 1)  # Refund the credit
