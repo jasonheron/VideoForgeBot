@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Forge - AI Video Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="file"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+        }
+
+        .file-upload {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-upload input[type="file"] {
+            padding: 20px;
+            border: 2px dashed #e0e0e0;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-upload input[type="file"]:hover {
+            border-color: #667eea;
+            background: #f5f7ff;
+        }
+
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .model-option {
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        .model-option:hover {
+            border-color: #667eea;
+            background: #f5f7ff;
+        }
+
+        .model-option.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .model-option input[type="radio"] {
+            display: none;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-left: 4px solid #1976d2;
+        }
+
+        .status.success {
+            background: #e8f5e9;
+            color: #388e3c;
+            border-left: 4px solid #388e3c;
+        }
+
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #c62828;
+        }
+
+        .status.loading {
+            background: #fff3e0;
+            color: #f57c00;
+            border-left: 4px solid #f57c00;
+        }
+
+        .video-result {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .video-result video {
+            width: 100%;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        .api-key-section {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 25px;
+        }
+
+        .api-key-section input {
+            margin-top: 10px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 Video Forge</h1>
+            <p>AI Video Generation Platform</p>
+        </div>
+        
+        <div class="content">
+            <!-- API Key Section -->
+            <div class="api-key-section">
+                <label>🔑 API Key (Required)</label>
+                <input type="text" id="apiKey" placeholder="Enter your BRS AI API Key" value="">
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    Get your API key from <a href="https://kie.ai/api-key" target="_blank">kie.ai/api-key</a>
+                </small>
+            </div>
+
+            <form id="videoForm">
+                <!-- Model Selection -->
+                <div class="form-group">
+                    <label>🤖 Select AI Model</label>
+                    <div class="model-grid" id="modelGrid">
+                        <div class="model-option" data-model="veo3_fast">
+                            <input type="radio" name="model" value="veo3_fast" id="veo3_fast">
+                            <label for="veo3_fast">⚡ Veo 3 Fast</label>
+                        </div>
+                        <div class="model-option" data-model="veo3_1_fast">
+                            <input type="radio" name="model" value="veo3_1_fast" id="veo3_1_fast">
+                            <label for="veo3_1_fast">🚀 Veo 3.1 Fast</label>
+                        </div>
+                        <div class="model-option" data-model="runway_gen3">
+                            <input type="radio" name="model" value="runway_gen3" id="runway_gen3">
+                            <label for="runway_gen3">🚀 Runway Gen-3</label>
+                        </div>
+                        <div class="model-option" data-model="wan_2_5">
+                            <input type="radio" name="model" value="wan_2_5" id="wan_2_5">
+                            <label for="wan_2_5">🌟 Wan 2.5</label>
+                        </div>
+                        <div class="model-option" data-model="hailuo">
+                            <input type="radio" name="model" value="hailuo" id="hailuo">
+                            <label for="hailuo">🎭 Hailuo 2.3 Pro</label>
+                        </div>
+                        <div class="model-option" data-model="kling_standard">
+                            <input type="radio" name="model" value="kling_standard" id="kling_standard">
+                            <label for="kling_standard">💰 Kling 2.1</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Prompt -->
+                <div class="form-group">
+                    <label for="prompt">📝 Video Prompt</label>
+                    <textarea id="prompt" placeholder="Describe the video you want to generate... e.g., 'A cat playing with a ball in a sunny park'" required></textarea>
+                </div>
+
+                <!-- Image Upload (Optional) -->
+                <div class="form-group">
+                    <label>🖼️ Image (Optional)</label>
+                    <div class="file-upload">
+                        <input type="file" id="imageFile" accept="image/*">
+                    </div>
+                    <small style="display: block; margin-top: 5px; color: #666;">
+                        Upload an image for image-to-video generation
+                    </small>
+                </div>
+
+                <!-- Generate Button -->
+                <button type="submit" class="btn" id="generateBtn">
+                    🎬 Generate Video
+                </button>
+
+                <!-- Status Messages -->
+                <div id="status" class="status"></div>
+
+                <!-- Video Result -->
+                <div id="videoResult" class="video-result">
+                    <h3>✅ Video Generated!</h3>
+                    <video id="videoPlayer" controls></video>
+                    <a id="downloadLink" href="#" download style="display: inline-block; margin-top: 10px; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 5px;">
+                        📥 Download Video
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Model selection UI
+        document.querySelectorAll('.model-option').forEach(option => {
+            option.addEventListener('click', function() {
+                document.querySelectorAll('.model-option').forEach(o => o.classList.remove('selected'));
+                this.classList.add('selected');
+                this.querySelector('input[type="radio"]').checked = true;
+            });
+        });
+
+        // Load saved API key
+        const savedApiKey = localStorage.getItem('brs_api_key');
+        if (savedApiKey) {
+            document.getElementById('apiKey').value = savedApiKey;
+        }
+
+        // Save API key on change
+        document.getElementById('apiKey').addEventListener('change', function() {
+            localStorage.setItem('brs_api_key', this.value);
+        });
+
+        // Form submission
+        document.getElementById('videoForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const apiKey = document.getElementById('apiKey').value;
+            const model = document.querySelector('input[name="model"]:checked')?.value;
+            const prompt = document.getElementById('prompt').value;
+            const imageFile = document.getElementById('imageFile').files[0];
+
+            // Validation
+            if (!apiKey) {
+                showStatus('Please enter your API key', 'error');
+                return;
+            }
+
+            if (!model) {
+                showStatus('Please select a model', 'error');
+                return;
+            }
+
+            if (!prompt.trim()) {
+                showStatus('Please enter a prompt', 'error');
+                return;
+            }
+
+            const generateBtn = document.getElementById('generateBtn');
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<span class="spinner"></span>Generating...';
+
+            try {
+                showStatus('🚀 Starting video generation...', 'loading');
+
+                // Prepare form data
+                const formData = new FormData();
+                
+                // Convert image to base64 URL if provided
+                let imageUrl = null;
+                if (imageFile) {
+                    imageUrl = await uploadImageToServer(imageFile);
+                }
+
+                // Call API based on model type
+                let taskId;
+                if (model.startsWith('veo3')) {
+                    taskId = await generateVeoVideo(apiKey, model, prompt, imageUrl);
+                } else if (model === 'runway_gen3') {
+                    taskId = await generateRunwayVideo(apiKey, prompt, imageUrl);
+                } else if (model === 'wan_2_5' || model === 'hailuo') {
+                    taskId = await generateWanOrHailuoVideo(apiKey, model, prompt, imageUrl);
+                } else {
+                    taskId = await generateGenericVideo(apiKey, model, prompt, imageUrl);
+                }
+
+                showStatus(`✅ Generation started! Task ID: ${taskId}. Polling for results...`, 'info');
+
+                // Poll for results
+                pollForResults(apiKey, taskId);
+
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus(`❌ Error: ${error.message}`, 'error');
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '🎬 Generate Video';
+            }
+        });
+
+        async function uploadImageToServer(imageFile) {
+            // Upload image to server and get URL
+            const formData = new FormData();
+            formData.append('image', imageFile);
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                if (data.success && data.url) {
+                    return data.url;
+                }
+                throw new Error(data.error || 'Upload failed');
+            } catch (error) {
+                // Fallback: try to use data URL if upload fails
+                console.warn('Server upload failed, using data URL:', error);
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(imageFile);
+                });
+            }
+        }
+
+        async function generateVeoVideo(apiKey, model, prompt, imageUrl) {
+            const payload = {
+                prompt: prompt,
+                model: model === 'veo3_1_fast' ? 'veo3_fast' : model,
+                aspectRatio: '16:9',
+                enableFallback: false,
+                enableTranslation: true
+            };
+
+            if (imageUrl) {
+                payload.imageUrls = [imageUrl];
+                if (model === 'veo3_1_fast') {
+                    payload.generationType = 'FIRST_AND_LAST_FRAMES_2_VIDEO';
+                }
+            } else if (model === 'veo3_1_fast') {
+                payload.generationType = 'TEXT_2_VIDEO';
+            }
+
+            const response = await fetch('https://api.kie.ai/api/v1/veo/generate', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+            if (data.code === 200 && data.data?.taskId) {
+                return data.data.taskId;
+            }
+            throw new Error(data.msg || 'Failed to start generation');
+        }
+
+        async function generateRunwayVideo(apiKey, prompt, imageUrl) {
+            const payload = {
+                prompt: prompt,
+                duration: 5,
+                quality: '720p',
+                aspectRatio: '16:9',
+                model: 'runway-duration-5-generate',
+                waterMark: ''
+            };
+
+            if (imageUrl) {
+                payload.imageUrl = imageUrl;
+            }
+
+            const response = await fetch('https://api.kie.ai/api/v1/runway/generate', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+            if (data.code === 200 && data.data?.taskId) {
+                return data.data.taskId;
+            }
+            throw new Error(data.msg || 'Failed to start generation');
+        }
+
+        async function generateWanOrHailuoVideo(apiKey, model, prompt, imageUrl) {
+            const modelMap = {
+                'wan_2_5': 'wan/2-5-image-to-video',
+                'hailuo': 'hailuo/2-3-image-to-video-pro'
+            };
+
+            const inputData = {
+                prompt: prompt
+            };
+
+            if (model === 'wan_2_5') {
+                inputData.duration = '5';
+                inputData.resolution = '1080p';
+                inputData.enable_prompt_expansion = true;
+            } else if (model === 'hailuo') {
+                inputData.duration = '6';
+                inputData.resolution = '768P';
+            }
+
+            if (!imageUrl) {
+                throw new Error(`${model} requires an image`);
+            }
+            inputData.image_url = imageUrl;
+
+            const payload = {
+                model: modelMap[model],
+                input: inputData
+            };
+
+            const response = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+            if (data.code === 200 && data.data?.taskId) {
+                return data.data.taskId;
+            }
+            throw new Error(data.msg || 'Failed to start generation');
+        }
+
+        async function generateGenericVideo(apiKey, model, prompt, imageUrl) {
+            // Generic handler for other models
+            const response = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: model,
+                    input: {
+                        prompt: prompt,
+                        ...(imageUrl && { image_url: imageUrl })
+                    }
+                })
+            });
+
+            const data = await response.json();
+            if (data.code === 200 && data.data?.taskId) {
+                return data.data.taskId;
+            }
+            throw new Error(data.msg || 'Failed to start generation');
+        }
+
+        async function pollForResults(apiKey, taskId) {
+            const maxAttempts = 60; // 5 minutes max
+            let attempts = 0;
+
+            const pollInterval = setInterval(async () => {
+                attempts++;
+
+                try {
+                    const response = await fetch(`https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`, {
+                        headers: {
+                            'Authorization': `Bearer ${apiKey}`
+                        }
+                    });
+
+                    const data = await response.json();
+
+                    if (data.code === 200 && data.data) {
+                        const state = data.data.state;
+
+                        if (state === 'success') {
+                            clearInterval(pollInterval);
+                            const resultJson = JSON.parse(data.data.resultJson);
+                            const videoUrl = resultJson.resultUrls?.[0];
+
+                            if (videoUrl) {
+                                showVideoResult(videoUrl);
+                                showStatus('✅ Video generated successfully!', 'success');
+                                document.getElementById('generateBtn').disabled = false;
+                                document.getElementById('generateBtn').innerHTML = '🎬 Generate Video';
+                            }
+                        } else if (state === 'fail') {
+                            clearInterval(pollInterval);
+                            showStatus(`❌ Generation failed: ${data.data.failMsg || 'Unknown error'}`, 'error');
+                            document.getElementById('generateBtn').disabled = false;
+                            document.getElementById('generateBtn').innerHTML = '🎬 Generate Video';
+                        } else {
+                            // Still processing
+                            showStatus(`⏳ Processing... (${attempts}/${maxAttempts})`, 'loading');
+                        }
+                    }
+
+                    if (attempts >= maxAttempts) {
+                        clearInterval(pollInterval);
+                        showStatus('❌ Timeout: Generation took too long', 'error');
+                        document.getElementById('generateBtn').disabled = false;
+                        document.getElementById('generateBtn').innerHTML = '🎬 Generate Video';
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }, 5000); // Poll every 5 seconds
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+        }
+
+        function showVideoResult(videoUrl) {
+            const videoResult = document.getElementById('videoResult');
+            const videoPlayer = document.getElementById('videoPlayer');
+            const downloadLink = document.getElementById('downloadLink');
+
+            videoPlayer.src = videoUrl;
+            downloadLink.href = videoUrl;
+            videoResult.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
+
